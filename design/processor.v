@@ -1,7 +1,8 @@
 module processor (
 
-  input clock ;
-  output reg [17:0] PC ;
+  input clock,
+  input current_instruction,
+  output reg [31:0] PC
 
 ) ;
   

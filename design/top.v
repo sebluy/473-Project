@@ -5,7 +5,7 @@ module top (
   input CLOCK_50,
   inout [7:0] LCD_DATA,
   output LCD_RW, LCD_EN, LCD_RS, LCD_BLON, LCD_ON,
-  output [6:0] HEX7, HEX6, HEX3, HEX2, HEX1, HEX0,
+  output [6:0] HEX7, HEX6, HEX5, HEX4, HEX3, HEX2, HEX1, HEX0,
   output [17:0] LEDR
 
 ) ;
@@ -17,12 +17,14 @@ module top (
   wire [31:0] instruction_memory_value ;
   wire [31:0] instruction_memory_address ;
   wire [1:0] LCD_value_select ;
+  wire [31:0] current_instruction ;
   wire clock_control ;
   wire manual_clock ;
   wire push_button_debounced ;
   wire clock_1hz ;
   wire clock_100hz ;
   wire clock_50Mhz ;
+  wire [31:0] PC ;
 
   reg clock ;
   reg [15:0] clock_count ;
@@ -75,15 +77,18 @@ module top (
       register_reset = 0 ;
   end
 
-  /* register file */
-  register_file(5'b0, 5'b0, 1'b0, register_reset, clock, 5'b0, 32'b0, 
-                  clock, register_address,,, register_value) ;
-  
-  /* data memory */
-  ramlpm(data_memory_address, clock, 32'b0, 1'b0, data_memory_value) ;
-
-  /* instruction memory */
-  romlpm(instruction_memory_address, clock, instruction_memory_value) ;
+  /* computer */
+  computer(
+    clock, 
+    register_reset, 
+    register_address, 
+    register_value,
+    data_memory_address,
+    data_memory_value,
+    instruction_memory_address,
+    instruction_memory_value,
+    current_instruction
+  ) ;
 
   /* choose value and address */
   always @(LCD_value_select)
@@ -114,6 +119,10 @@ module top (
   hexdigit(address[3:0],HEX6[6:0]) ;
   hexdigit({3'b0,address[4]},HEX7[6:0]) ;
 
+  /* show PC on HEX4 and HEX5 */
+  hexdigit(PC[3:0], HEX4[6:0]) ;
+  hexdigit(PC[7:4], HEX5[6:0]) ;
+
   /* show clock count on HEX3 through HEX0 */
   hexdigit(clock_count[3:0], HEX0[6:0]) ;
   hexdigit(clock_count[7:4], HEX1[6:0]) ;
@@ -121,7 +130,7 @@ module top (
   hexdigit(clock_count[15:12], HEX3[6:0]) ;
 
   /* LCD Display */
-  LCD_Display(1'b1, clock_50Mhz, {instruction_memory_value, value},
+  LCD_Display(1'b1, clock_50Mhz, {current_instruction, value},
                LCD_RS, LCD_EN, LCD_RW, LCD_DATA[7:0]) ;
   
 endmodule
