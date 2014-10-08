@@ -22,15 +22,18 @@ module register_file (
     if (reset == 1)
 
       for(i = 0 ; i < 32 ; i = i + 1)
-        registers[i] = i ;
+        registers[i] <= i ;
 
     else if (write_enable == 1)
 
         registers[write_address] = write_data_in ;
 
+  end
+
+  always @(negedge clock)
+  begin
     data_out_1 <= registers[read_address_1] ;
     data_out_2 <= registers[read_address_2] ;
-
   end
 
   always @(posedge clock_debug)

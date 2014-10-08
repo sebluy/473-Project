@@ -5,8 +5,7 @@ module top (
   input CLOCK_50,
   inout [7:0] LCD_DATA,
   output LCD_RW, LCD_EN, LCD_RS, LCD_BLON, LCD_ON,
-  output [6:0] HEX7, HEX6, HEX5, HEX4, HEX3, HEX2, HEX1, HEX0,
-  output [17:0] LEDR
+  output [6:0] HEX7, HEX6, HEX5, HEX4, HEX3, HEX2, HEX1, HEX0
 
 ) ;
   
@@ -25,6 +24,7 @@ module top (
   wire clock_100hz ;
   wire clock_50Mhz ;
   wire [31:0] PC ;
+  wire reset ;
 
   reg clock ;
   reg [15:0] clock_count ;
@@ -40,6 +40,7 @@ module top (
   assign LCD_value_select = SW[16:15] ;
   assign LCD_ON = 1'b1 ;
   assign LCD_BLON = 1'b1 ;
+  assign reset = KEY[0] ;
 
   /* extract 1hz clock */
   clk_div(clock_50Mhz,,,,,clock_100hz,,clock_1hz) ;
@@ -60,9 +61,9 @@ module top (
   end
 
   /* update counter */
-  always @(posedge clock or negedge KEY[0])
+  always @(posedge clock)
   begin
-    if (~KEY[0])
+    if (~reset)
       clock_count = 0 ;
     else
       clock_count = clock_count + 1 ;
@@ -80,6 +81,7 @@ module top (
   /* computer */
   computer(
     clock, 
+    reset,
     register_reset, 
     register_address, 
     register_value,
@@ -87,6 +89,7 @@ module top (
     data_memory_value,
     instruction_memory_address,
     instruction_memory_value,
+    PC,
     current_instruction
   ) ;
 
