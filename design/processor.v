@@ -3,11 +3,11 @@ module processor (
   input clock,
   input reset,
   
-  /* fetch */
+  /* pc */
   output reg [31:0] PC,
   input [31:0] current_instruction,
 
-  /* decode */
+  /* register file */
   output [5:0] register_file_read_address_1,
   output [5:0] register_file_read_address_2,
   output [31:0] register_file_write_value,
@@ -19,7 +19,6 @@ module processor (
   input [31:0] register_file_read_value_2
 
 ) ;
-  
 
   /***************/
   /* FETCH STAGE */
@@ -31,7 +30,7 @@ module processor (
   /* update clock */
   always @(posedge clock)
   begin
-    if (~reset)
+    if (reset)
       PC = 0 ;
     else
       PC = PC + 4 ;
@@ -51,11 +50,11 @@ module processor (
   wire [4:0] rs_decode ;
   wire [4:0] rt_decode ;
   wire [4:0] rd_decode ;
-  wire decode_write_address ;
+  wire [4:0] decode_write_address ;
 
-  reg decode_execution_read_value_1 ;
-  reg decode_execution_read_value_2 ;
-  reg decode_execution_write_address ;
+  reg [31:0] decode_execution_read_value_1 ;
+  reg [31:0] decode_execution_read_value_2 ;
+  reg [4:0] decode_execution_write_address ;
   reg decode_execution_valid ;
   
   assign rs_decode = fetch_decode_instruction[25:21] ;
@@ -78,13 +77,42 @@ module processor (
   /* EXECUTION STAGE */
   /*******************/
 
-  assign register_file_write_value = decode_execution_read_value_1 
-                  + decode_execution_read_value_2 ;
+  reg [31:0] execution_memory_value ;
+  reg [4:0] execution_memory_address ;
+  reg execution_memory_valid ;
 
-  assign register_file_write_address = decode_execution_write_address ;
+  always @(posedge clock)
+  begin
+    execution_memory_value <= decode_execution_read_value_1 +
+      decode_execution_read_value_2 ;
+    execution_memory_address <= decode_execution_write_address ;
+    execution_memory_valid <= decode_execution_valid ;
+  end
 
-  assign register_file_write_enable = decode_execution_valid ;
+  /****************/
+  /* MEMORY STAGE */
+  /****************/
 
+  reg [31:0] memory_writeback_value ;
+  reg [4:0] memory_writeback_address ;
+  reg memory_writeback_valid ;
+
+  always @(posedge clock)
+  begin
+    memory_writeback_value <= execution_memory_value ;
+    memory_writeback_address <= execution_memory_address ;
+    memory_writeback_valid <= execution_memory_valid ;
+  end
+
+  /********************/
+  /* WRITE BACK STAGE */
+  /********************/
   
+  assign register_file_write_value = memory_writeback_value ;
+
+  assign register_file_write_address = memory_writeback_address ;
+
+  assign register_file_write_enable = memory_writeback_valid ;
+
 endmodule
-  
+
