@@ -5,8 +5,7 @@ module top (
   input CLOCK_50,
   inout [7:0] LCD_DATA,
   output LCD_RW, LCD_EN, LCD_RS, LCD_BLON, LCD_ON,
-  output [6:0] HEX7, HEX6, HEX5, HEX4, HEX3, HEX2, HEX1, HEX0,
-  output [17:0] LEDR
+  output [6:0] HEX7, HEX6, HEX5, HEX4, HEX3, HEX2, HEX1, HEX0
 ) ;
   
   wire [31:0] data_memory_value ;
@@ -91,8 +90,7 @@ module top (
     instruction_memory_address,
     instruction_memory_value,
     PC,
-    current_instruction,
-    LEDR
+    current_instruction
   ) ;
 
   /* choose value and address */
