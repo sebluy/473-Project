@@ -5,8 +5,8 @@ module top (
   input CLOCK_50,
   inout [7:0] LCD_DATA,
   output LCD_RW, LCD_EN, LCD_RS, LCD_BLON, LCD_ON,
-  output [6:0] HEX7, HEX6, HEX5, HEX4, HEX3, HEX2, HEX1, HEX0
-
+  output [6:0] HEX7, HEX6, HEX5, HEX4, HEX3, HEX2, HEX1, HEX0,
+  output [17:0] LEDR
 ) ;
   
   wire [31:0] data_memory_value ;
@@ -40,13 +40,13 @@ module top (
   assign LCD_value_select = SW[16:15] ;
   assign LCD_ON = 1'b1 ;
   assign LCD_BLON = 1'b1 ;
-  assign reset = KEY[0] ;
+  assign reset = ~KEY[0] ;
 
   /* extract 1hz clock */
   clk_div(clock_50Mhz,,,,,clock_100hz,,clock_1hz) ;
 
   /* debounce pushbutton */
-  debounce(KEY[1], clock_100hz, push_button_debounced) ;
+  debounce(~KEY[1], clock_100hz, push_button_debounced) ;
 
   /* One pulse pushbutton */
   onepulse(push_button_debounced, clock_1hz, manual_clock) ;
@@ -63,7 +63,7 @@ module top (
   /* update counter */
   always @(posedge clock)
   begin
-    if (~reset)
+    if (reset)
       clock_count = 0 ;
     else
       clock_count = clock_count + 1 ;
@@ -90,7 +90,8 @@ module top (
     instruction_memory_address,
     instruction_memory_value,
     PC,
-    current_instruction
+    current_instruction,
+    LEDR
   ) ;
 
   /* choose value and address */

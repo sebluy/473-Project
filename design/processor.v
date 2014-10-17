@@ -13,10 +13,11 @@ module processor (
   output [31:0] register_file_write_value,
   output [5:0] register_file_write_address,
   output register_file_write_enable,
-  output register_file_reset,
 
   input [31:0] register_file_read_value_1,
-  input [31:0] register_file_read_value_2
+  input [31:0] register_file_read_value_2,
+
+  output [17:0] LEDR
 
 ) ;
 
@@ -33,6 +34,8 @@ module processor (
       PC = PC + 4 ;
   end
 
+  assign LEDR[17:0] = 18'b101010101010101010 ;
+
   /* fetch_decode pipeline registers */
   reg [31:0] fetch_decode_instruction ;
 
@@ -41,6 +44,7 @@ module processor (
   begin
     fetch_decode_instruction <= current_instruction ;
   end
+
 
   /****************/
   /* DECODE STAGE */
