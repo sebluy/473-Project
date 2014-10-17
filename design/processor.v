@@ -24,9 +24,6 @@ module processor (
   /* FETCH STAGE */
   /***************/
 
-  reg [31:0] fetch_decode_instruction ;
-  reg fetch_decode_valid ;
-
   /* update clock */
   always @(posedge clock)
   begin
@@ -36,41 +33,56 @@ module processor (
       PC = PC + 4 ;
   end
 
+  /* fetch_decode pipeline registers */
+  reg [31:0] fetch_decode_instruction ;
+
   /* latch instruction coming out of instruction memory */
   always @(posedge clock)
   begin
     fetch_decode_instruction <= current_instruction ;
-    fetch_decode_valid <= 1'b1 ;
   end
 
   /****************/
   /* DECODE STAGE */
   /****************/
 
+  wire [5:0] opcode_decode ;
   wire [4:0] rs_decode ;
   wire [4:0] rt_decode ;
   wire [4:0] rd_decode ;
-  wire [4:0] decode_write_address ;
+  wire [4:0] shamt_decode ;
+  wire [5:0] funct_decode ;
+  wire [4:0] write_address_decode ;
+  wire add_instruction_decode ;
+
+  /* R format */
+  assign opcode_decode = fetch_decode_instruction[31:26] ;
+  assign rs_decode = fetch_decode_instruction[25:21] ;
+  assign rt_decode = fetch_decode_instruction[20:16] ;
+  assign rd_decode = fetch_decode_instruction[15:11] ;
+  assign shamt_decode = fetch_decode_instruction[10:6] ;
+  assign funct_decode = fetch_decode_instruction[5:0] ;
+
+  assign register_file_read_address_1 = rs_decode ;
+  assign register_file_read_address_2 = rt_decode ;
+  assign write_address_decode = rd_decode ;
+  assign add_instruction_decode = (funct_decode == 6'h20) &&
+                                  (shamt_decode == 5'h00) &&
+                                  (opcode_decode == 6'h00) ;
+  
+  /* decode execution pipeline registers */
 
   reg [31:0] decode_execution_read_value_1 ;
   reg [31:0] decode_execution_read_value_2 ;
   reg [4:0] decode_execution_write_address ;
   reg decode_execution_valid ;
-  
-  assign rs_decode = fetch_decode_instruction[25:21] ;
-  assign rt_decode = fetch_decode_instruction[20:16] ;
-  assign rd_decode = fetch_decode_instruction[15:11] ;
 
-  assign register_file_read_address_1 = rs_decode ;
-  assign register_file_read_address_2 = rt_decode ;
-  assign decode_write_address = rd_decode ;
-  
   always @(posedge clock)
   begin
     decode_execution_read_value_1 <= register_file_read_value_1 ;
     decode_execution_read_value_2 <= register_file_read_value_2 ;
-    decode_execution_write_address <= decode_write_address ;
-    decode_execution_valid <= fetch_decode_valid ;
+    decode_execution_write_address <= write_address_decode ;
+    decode_execution_valid <= add_instruction_decode ;
   end
 
   /*******************/
