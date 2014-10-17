@@ -39,19 +39,21 @@
 module romlpm (
 	address_a,
 	address_b,
-	clock,
+	clock_a,
+	clock_b,
 	q_a,
 	q_b);
 
 	input	[9:0]  address_a;
 	input	[9:0]  address_b;
-	input	  clock;
+	input	  clock_a;
+	input	  clock_b;
 	output	[31:0]  q_a;
 	output	[31:0]  q_b;
 `ifndef ALTERA_RESERVED_QIS
 // synopsys translate_off
 `endif
-	tri1	  clock;
+	tri1	  clock_a;
 `ifndef ALTERA_RESERVED_QIS
 // synopsys translate_on
 `endif
@@ -64,9 +66,10 @@ module romlpm (
 	wire [31:0] q_a = sub_wire1[31:0];
 
 	altsyncram	altsyncram_component (
-				.clock0 (clock),
+				.clock0 (clock_a),
 				.wren_a (sub_wire2),
 				.address_b (address_b),
+				.clock1 (clock_b),
 				.data_b (sub_wire3),
 				.wren_b (sub_wire2),
 				.address_a (address_a),
@@ -81,7 +84,6 @@ module romlpm (
 				.addressstall_b (),
 				.byteena_a (),
 				.byteena_b (),
-				.clock1 (),
 				.clocken0 (),
 				.clocken1 (),
 				.clocken2 (),
@@ -92,13 +94,13 @@ module romlpm (
 				// synopsys translate_on
 				);
 	defparam
-		altsyncram_component.address_reg_b = "CLOCK0",
+		altsyncram_component.address_reg_b = "CLOCK1",
 		altsyncram_component.clock_enable_input_a = "BYPASS",
 		altsyncram_component.clock_enable_input_b = "BYPASS",
 		altsyncram_component.clock_enable_output_a = "BYPASS",
 		altsyncram_component.clock_enable_output_b = "BYPASS",
-		altsyncram_component.indata_reg_b = "CLOCK0",
-		altsyncram_component.init_file = "../MINE/MIF/instruction_memory.mif",
+		altsyncram_component.indata_reg_b = "CLOCK1",
+		altsyncram_component.init_file = "./MINE/MIF/instruction_memory.mif",
 		altsyncram_component.intended_device_family = "Cyclone II",
 		altsyncram_component.lpm_type = "altsyncram",
 		altsyncram_component.numwords_a = 1024,
@@ -115,7 +117,7 @@ module romlpm (
 		altsyncram_component.width_b = 32,
 		altsyncram_component.width_byteena_a = 1,
 		altsyncram_component.width_byteena_b = 1,
-		altsyncram_component.wrcontrol_wraddress_reg_b = "CLOCK0";
+		altsyncram_component.wrcontrol_wraddress_reg_b = "CLOCK1";
 
 
 endmodule
@@ -129,7 +131,7 @@ endmodule
 // Retrieval info: PRIVATE: BYTEENA_ACLR_B NUMERIC "0"
 // Retrieval info: PRIVATE: BYTE_ENABLE_A NUMERIC "0"
 // Retrieval info: PRIVATE: BYTE_ENABLE_B NUMERIC "0"
-// Retrieval info: PRIVATE: BYTE_SIZE NUMERIC "8"
+// Retrieval info: PRIVATE: BYTE_SIZE NUMERIC "1"
 // Retrieval info: PRIVATE: BlankMemory NUMERIC "0"
 // Retrieval info: PRIVATE: CLOCK_ENABLE_INPUT_A NUMERIC "0"
 // Retrieval info: PRIVATE: CLOCK_ENABLE_INPUT_B NUMERIC "0"
@@ -141,7 +143,7 @@ endmodule
 // Retrieval info: PRIVATE: CLRrren NUMERIC "0"
 // Retrieval info: PRIVATE: CLRwraddress NUMERIC "0"
 // Retrieval info: PRIVATE: CLRwren NUMERIC "0"
-// Retrieval info: PRIVATE: Clock NUMERIC "0"
+// Retrieval info: PRIVATE: Clock NUMERIC "5"
 // Retrieval info: PRIVATE: Clock_A NUMERIC "0"
 // Retrieval info: PRIVATE: Clock_B NUMERIC "0"
 // Retrieval info: PRIVATE: IMPLEMENT_IN_LES NUMERIC "0"
@@ -155,7 +157,7 @@ endmodule
 // Retrieval info: PRIVATE: MAXIMUM_DEPTH NUMERIC "0"
 // Retrieval info: PRIVATE: MEMSIZE NUMERIC "32768"
 // Retrieval info: PRIVATE: MEM_IN_BITS NUMERIC "0"
-// Retrieval info: PRIVATE: MIFfilename STRING "../MINE/MIF/instruction_memory.mif"
+// Retrieval info: PRIVATE: MIFfilename STRING "./MINE/MIF/instruction_memory.mif"
 // Retrieval info: PRIVATE: OPERATION_MODE NUMERIC "3"
 // Retrieval info: PRIVATE: OUTDATA_ACLR_B NUMERIC "0"
 // Retrieval info: PRIVATE: OUTDATA_REG_B NUMERIC "0"
@@ -181,13 +183,13 @@ endmodule
 // Retrieval info: PRIVATE: enable NUMERIC "0"
 // Retrieval info: PRIVATE: rden NUMERIC "0"
 // Retrieval info: LIBRARY: altera_mf altera_mf.altera_mf_components.all
-// Retrieval info: CONSTANT: ADDRESS_REG_B STRING "CLOCK0"
+// Retrieval info: CONSTANT: ADDRESS_REG_B STRING "CLOCK1"
 // Retrieval info: CONSTANT: CLOCK_ENABLE_INPUT_A STRING "BYPASS"
 // Retrieval info: CONSTANT: CLOCK_ENABLE_INPUT_B STRING "BYPASS"
 // Retrieval info: CONSTANT: CLOCK_ENABLE_OUTPUT_A STRING "BYPASS"
 // Retrieval info: CONSTANT: CLOCK_ENABLE_OUTPUT_B STRING "BYPASS"
-// Retrieval info: CONSTANT: INDATA_REG_B STRING "CLOCK0"
-// Retrieval info: CONSTANT: INIT_FILE STRING "../MINE/MIF/instruction_memory.mif"
+// Retrieval info: CONSTANT: INDATA_REG_B STRING "CLOCK1"
+// Retrieval info: CONSTANT: INIT_FILE STRING "./MINE/MIF/instruction_memory.mif"
 // Retrieval info: CONSTANT: INTENDED_DEVICE_FAMILY STRING "Cyclone II"
 // Retrieval info: CONSTANT: LPM_TYPE STRING "altsyncram"
 // Retrieval info: CONSTANT: NUMWORDS_A NUMERIC "1024"
@@ -204,15 +206,17 @@ endmodule
 // Retrieval info: CONSTANT: WIDTH_B NUMERIC "32"
 // Retrieval info: CONSTANT: WIDTH_BYTEENA_A NUMERIC "1"
 // Retrieval info: CONSTANT: WIDTH_BYTEENA_B NUMERIC "1"
-// Retrieval info: CONSTANT: WRCONTROL_WRADDRESS_REG_B STRING "CLOCK0"
+// Retrieval info: CONSTANT: WRCONTROL_WRADDRESS_REG_B STRING "CLOCK1"
 // Retrieval info: USED_PORT: address_a 0 0 10 0 INPUT NODEFVAL "address_a[9..0]"
 // Retrieval info: USED_PORT: address_b 0 0 10 0 INPUT NODEFVAL "address_b[9..0]"
-// Retrieval info: USED_PORT: clock 0 0 0 0 INPUT VCC "clock"
+// Retrieval info: USED_PORT: clock_a 0 0 0 0 INPUT VCC "clock_a"
+// Retrieval info: USED_PORT: clock_b 0 0 0 0 INPUT NODEFVAL "clock_b"
 // Retrieval info: USED_PORT: q_a 0 0 32 0 OUTPUT NODEFVAL "q_a[31..0]"
 // Retrieval info: USED_PORT: q_b 0 0 32 0 OUTPUT NODEFVAL "q_b[31..0]"
 // Retrieval info: CONNECT: @address_a 0 0 10 0 address_a 0 0 10 0
 // Retrieval info: CONNECT: @address_b 0 0 10 0 address_b 0 0 10 0
-// Retrieval info: CONNECT: @clock0 0 0 0 0 clock 0 0 0 0
+// Retrieval info: CONNECT: @clock0 0 0 0 0 clock_a 0 0 0 0
+// Retrieval info: CONNECT: @clock1 0 0 0 0 clock_b 0 0 0 0
 // Retrieval info: CONNECT: @data_a 0 0 32 0 GND 0 0 32 0
 // Retrieval info: CONNECT: @data_b 0 0 32 0 GND 0 0 32 0
 // Retrieval info: CONNECT: @wren_a 0 0 0 0 GND 0 0 0 0

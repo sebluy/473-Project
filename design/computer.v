@@ -1,6 +1,7 @@
 module computer (
 
   input clock,
+  input clock_50MHz,
   input reset,
   input register_reset,
   input [5:0] display_register_address,
@@ -26,17 +27,17 @@ module computer (
   /* register file */ 
   register_file(register_file_read_address_1, register_file_read_address_2,
     register_file_write_enable, register_reset, clock, 
-    register_file_write_address, register_file_write_value, clock,
+    register_file_write_address, register_file_write_value, clock_50MHz,
     display_register_address, register_file_read_value_1,
     register_file_read_value_2, display_register_value) ;
 
   /* ram */
-  ramlpm(32'b0, {25'b0, display_data_memory_address, 2'b0}, ~clock, 32'b0,
-    32'b0, 1'b0, 1'b0, , display_data_memory_value) ;
+  ramlpm(32'b0, {25'b0, display_data_memory_address, 2'b0}, ~clock, 
+    clock_50MHz, 32'b0, 32'b0, 1'b0, 1'b0, , display_data_memory_value) ;
 
   /* rom */
   romlpm(PC, {display_instruction_memory_address, 2'b0}, ~clock, 
-          current_instruction, display_instruction_memory_value) ;
+    clock_50MHz, current_instruction, display_instruction_memory_value) ;
   
   /* processor */
   processor(clock, reset, PC, current_instruction, 

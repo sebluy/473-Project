@@ -20,9 +20,9 @@ module top (
   wire clock_control ;
   wire manual_clock ;
   wire push_button_debounced ;
-  wire clock_1hz ;
-  wire clock_100hz ;
-  wire clock_50Mhz ;
+  wire clock_1Hz ;
+  wire clock_100Hz ;
+  wire clock_50MHz ;
   wire [31:0] PC ;
   wire reset ;
 
@@ -36,20 +36,20 @@ module top (
   assign data_memory_address = SW[9:5] ;
   assign instruction_memory_address = SW[14:10] ;
   assign clock_control = SW[17] ;
-  assign clock_50Mhz = CLOCK_50 ;
+  assign clock_50MHz = CLOCK_50 ;
   assign LCD_value_select = SW[16:15] ;
   assign LCD_ON = 1'b1 ;
   assign LCD_BLON = 1'b1 ;
   assign reset = ~KEY[0] ;
 
-  /* extract 1hz clock */
-  clk_div(clock_50Mhz,,,,,clock_100hz,,clock_1hz) ;
+  /* extract 1Hz clock */
+  clk_div(clock_50MHz,,,,,clock_100Hz,,clock_1Hz) ;
 
   /* debounce pushbutton */
-  debounce(~KEY[1], clock_100hz, push_button_debounced) ;
+  debounce(~KEY[1], clock_100Hz, push_button_debounced) ;
 
   /* One pulse pushbutton */
-  onepulse(push_button_debounced, clock_1hz, manual_clock) ;
+  onepulse(push_button_debounced, clock_1Hz, manual_clock) ;
 
   /* set clock */
   always @(clock_control)
@@ -57,7 +57,7 @@ module top (
     if (clock_control == 0)
       clock = manual_clock ;
     else
-      clock = clock_1hz ;
+      clock = clock_1Hz ;
   end
 
   /* update counter */
@@ -81,6 +81,7 @@ module top (
   /* computer */
   computer(
     clock, 
+    clock_50MHz,
     reset,
     register_reset, 
     register_address, 
@@ -134,7 +135,7 @@ module top (
   hexdigit(clock_count[15:12], HEX3[6:0]) ;
 
   /* LCD Display */
-  LCD_Display(1'b1, clock_50Mhz, {current_instruction, value},
+  LCD_Display(1'b1, clock_50MHz, {current_instruction, value},
                LCD_RS, LCD_EN, LCD_RW, LCD_DATA[7:0]) ;
   
 endmodule
