@@ -1,0 +1,7 @@
+/test/*
+/design/*.vhd
+/design/*.bak
+/design/*.qip
+/MIF/*
+
+
