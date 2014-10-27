@@ -72,6 +72,8 @@ module processor (
   
   /* decode execution pipeline registers */
 
+  reg [4:0] decode_execution_read_address_1 ;
+  reg [4:0] decode_execution_read_address_2 ;
   reg [31:0] decode_execution_read_value_1 ;
   reg [31:0] decode_execution_read_value_2 ;
   reg [4:0] decode_execution_write_address ;
@@ -79,6 +81,8 @@ module processor (
 
   always @(posedge clock)
   begin
+    decode_execution_read_address_1 <= register_file_read_address_1 ;
+    decode_execution_read_address_2 <= register_file_read_address_2 ;
     decode_execution_read_value_1 <= register_file_read_value_1 ;
     decode_execution_read_value_2 <= register_file_read_value_2 ;
     decode_execution_write_address <= write_address_decode ;
@@ -89,14 +93,45 @@ module processor (
   /* EXECUTION STAGE */
   /*******************/
 
+  reg [31:0] execution_operand_1 ;
+  reg [31:0] execution_operand_2 ;
+  wire [31:0] execution_result ;
+
+  /* operand selection with forwarding */
+
+  /* operand 1 */
+  always @(*)
+  begin
+    case (decode_execution_read_address_1)
+      execution_memory_address:
+        execution_operand_1 = execution_memory_value ;
+      default:
+        execution_operand_1 = decode_execution_read_value_1 ;
+    endcase
+  end
+
+  /* operand 2 */
+  always @(*)
+  begin
+    case (decode_execution_read_address_2)
+      execution_memory_address:
+        execution_operand_2 = execution_memory_value ;
+      default:
+        execution_operand_2 = decode_execution_read_value_2 ;
+    endcase
+  end
+
+  assign execution_result = execution_operand_1 + execution_operand_2 ;
+
+  /* execution memory pipeline registers */
+
   reg [31:0] execution_memory_value ;
   reg [4:0] execution_memory_address ;
   reg execution_memory_valid ;
 
   always @(posedge clock)
   begin
-    execution_memory_value <= decode_execution_read_value_1 +
-      decode_execution_read_value_2 ;
+    execution_memory_value <= execution_result ;
     execution_memory_address <= decode_execution_write_address ;
     execution_memory_valid <= decode_execution_valid ;
   end
