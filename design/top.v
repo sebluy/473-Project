@@ -63,18 +63,15 @@ module top (
   always @(posedge clock)
   begin
     if (reset)
+    begin
       clock_count = 0 ;
-    else
-      clock_count = clock_count + 1 ;
-  end
-
-  /* reset register when clock count is zero */
-  always @(clock_count)
-  begin
-    if (clock_count == 0)
       register_reset = 1 ;
+    end
     else
+    begin
+      clock_count = clock_count + 1 ;
       register_reset = 0 ;
+    end
   end
 
   /* computer */
