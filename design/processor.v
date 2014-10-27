@@ -105,6 +105,8 @@ module processor (
     case (decode_execution_read_address_1)
       execution_memory_address:
         execution_operand_1 = execution_memory_value ;
+      memory_writeback_address:
+        execution_operand_1 = memory_writeback_value ;
       default:
         execution_operand_1 = decode_execution_read_value_1 ;
     endcase
@@ -116,6 +118,8 @@ module processor (
     case (decode_execution_read_address_2)
       execution_memory_address:
         execution_operand_2 = execution_memory_value ;
+      memory_writeback_address:
+        execution_operand_2 = memory_writeback_value ;
       default:
         execution_operand_2 = decode_execution_read_value_2 ;
     endcase
