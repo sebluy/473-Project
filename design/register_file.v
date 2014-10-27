@@ -16,6 +16,12 @@ module register_file (
   integer i ;
   reg [31:0] registers [31:0] ;
 
+  initial
+  begin
+    for (i = 0 ; i < 32 ; i = i + 1)
+      registers[i] <= i ;
+  end 
+
   always @(posedge clock)
   begin
 
@@ -24,7 +30,7 @@ module register_file (
       for(i = 0 ; i < 32 ; i = i + 1)
         registers[i] <= i ;
 
-    else if (write_enable == 1)
+    else if (write_enable == 1 && write_address != 0)
 
         registers[write_address] = write_data_in ;
 
