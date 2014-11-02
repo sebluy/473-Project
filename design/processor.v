@@ -52,8 +52,17 @@ module processor (
   wire [4:0] rd_decode ;
   wire [4:0] shamt_decode ;
   wire [5:0] funct_decode ;
-  wire [4:0] write_address_decode ;
+  wire [15:0] immediate_decode ;
   wire add_instruction_decode ;
+  wire addiu_instruction_decode ;
+  wire r_type_decode ;
+  wire i_type_decode ;
+  wire valid_decode ;
+  
+  reg [31:0] immediate_sign_extend_decode ;
+  reg [4:0] read_address_1_decode ;
+  reg [4:0] read_address_2_decode ;
+  reg [4:0] write_address_decode ;
 
   /* R format */
   assign opcode_decode = fetch_decode_instruction[31:26] ;
@@ -63,30 +72,74 @@ module processor (
   assign shamt_decode = fetch_decode_instruction[10:6] ;
   assign funct_decode = fetch_decode_instruction[5:0] ;
 
-  assign register_file_read_address_1 = rs_decode ;
-  assign register_file_read_address_2 = rt_decode ;
-  assign write_address_decode = rd_decode ;
-  assign add_instruction_decode = (funct_decode == 6'h20) &&
-                                  (shamt_decode == 5'h00) &&
-                                  (opcode_decode == 6'h00) ;
-  
-  /* decode execution pipeline registers */
+  /* I format exclusive */
+  assign immediate_decode = fetch_decode_instruction[15:0] ;
 
+  /* sign extend immediate number */
+  always @(*)
+    immediate_sign_extend_decode[31:0] = 
+      {{16{immediate_decode[15]}}, immediate_decode} ;
+
+  /* assign instruction */
+  assign add_instruction_decode = 
+    (opcode_decode == 6'b000000) &&
+    (shamt_decode == 5'b00000) &&
+    (funct_decode == 6'b100000) ;
+  assign addiu_instruction_decode = (opcode_decode == 6'b001001) ;
+
+  /* assign instruction type */
+  assign r_type_decode = add_instruction_decode ;
+  assign i_type_decode = addiu_instruction_decode ;
+
+  /* assign inputs to register file */
+  always @(*)
+  begin
+    if (r_type_decode)
+    begin
+      read_address_1_decode <= rs_decode ;
+      read_address_2_decode <= rt_decode ;
+      write_address_decode <= rd_decode ;
+    end 
+    else if (i_type_decode)
+    begin
+      read_address_1_decode <= rs_decode ;
+      read_address_2_decode <= 5'b0 ;
+      write_address_decode <= rt_decode ;
+    end
+    else
+    begin
+      read_address_1_decode <= 5'b0 ;
+      read_address_2_decode <= 5'b0 ;
+      write_address_decode <= 5'b0 ;
+    end
+  end
+
+  assign valid_decode = add_instruction_decode || addiu_instruction_decode ;
+  assign register_file_read_address_1 = read_address_1_decode ;
+  assign register_file_read_address_2 = read_address_2_decode ;
+ 
+  /* decode execution pipeline registers */
   reg [4:0] decode_execution_read_address_1 ;
   reg [4:0] decode_execution_read_address_2 ;
   reg [31:0] decode_execution_read_value_1 ;
   reg [31:0] decode_execution_read_value_2 ;
+  reg [31:0] decode_execution_immediate ;
   reg [4:0] decode_execution_write_address ;
+  reg decode_execution_r_type ;
+  reg decode_execution_i_type ;
   reg decode_execution_valid ;
 
   always @(posedge clock)
   begin
-    decode_execution_read_address_1 <= register_file_read_address_1 ;
-    decode_execution_read_address_2 <= register_file_read_address_2 ;
+    decode_execution_read_address_1 <= read_address_1_decode ;
+    decode_execution_read_address_2 <= read_address_2_decode ;
     decode_execution_read_value_1 <= register_file_read_value_1 ;
     decode_execution_read_value_2 <= register_file_read_value_2 ;
+    decode_execution_immediate <= immediate_sign_extend_decode ;
     decode_execution_write_address <= write_address_decode ;
-    decode_execution_valid <= add_instruction_decode ;
+    decode_execution_r_type <= r_type_decode ;
+    decode_execution_i_type <= i_type_decode ;
+    decode_execution_valid <= valid_decode ;
   end
 
   /*******************/
@@ -95,7 +148,7 @@ module processor (
 
   reg [31:0] execution_operand_1 ;
   reg [31:0] execution_operand_2 ;
-  wire [31:0] execution_result ;
+  reg [31:0] execution_result ;
 
   /* operand selection with forwarding */
 
@@ -125,7 +178,15 @@ module processor (
     endcase
   end
 
-  assign execution_result = execution_operand_1 + execution_operand_2 ;
+  always @(*)
+  begin
+    if (decode_execution_r_type)
+      execution_result = execution_operand_1 + execution_operand_2 ;
+    else if (decode_execution_i_type)
+      execution_result = execution_operand_1 + decode_execution_immediate ;
+    else
+      execution_result = 32'b0 ;
+  end
 
   /* execution memory pipeline registers */
 
