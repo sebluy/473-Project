@@ -86,11 +86,25 @@ module processor (
   assign r_type_decode = opcode_decode == 6'h0 ;
   assign i_type_decode = opcode_decode == 9'h9 ; /* addui */
 
+  wire shift_funct_decode ;
+  assign shift_funct_decode = 
+    funct_decode == 6'h00 || /* sll */
+    funct_decode == 6'h02 || /* srl */
+    funct_decode == 6'h03 ; /* sra */
+
   assign funct_valid_decode = 
     funct_decode == 6'h20 || /* add */
-    funct_decode == 6'h22 ; /* subtract */
+    funct_decode == 6'h21 || /* addu */
+    funct_decode == 6'h22 || /* sub */
+    funct_decode == 6'h23 || /* subu */
+    funct_decode == 6'h24 || /* and */
+    funct_decode == 6'h25 || /* or */
+    funct_decode == 6'h27 || /* nor */
+    funct_decode == 6'h2a || /* slt */
+    shift_funct_decode ;
 
-  assign shamt_valid_decode = shamt_decode == 5'b0 ;
+  assign shamt_valid_decode = shift_funct_decode || 
+    (!shamt_decode && !shift_funct_decode) ;
 
   assign valid_decode = i_type_decode ||
     (r_type_decode && funct_valid_decode && shamt_valid_decode) ;
@@ -128,6 +142,7 @@ module processor (
   reg [31:0] decode_execution_read_value_2 ;
   reg [31:0] decode_execution_immediate ;
   reg [5:0] decode_execution_funct ;
+  reg [4:0] decode_execution_shamt ;
   reg [4:0] decode_execution_write_address ;
   reg decode_execution_r_type ;
   reg decode_execution_i_type ;
@@ -142,6 +157,7 @@ module processor (
     decode_execution_immediate <= immediate_sign_extend_decode ;
     decode_execution_write_address <= write_address_decode ;
     decode_execution_funct <= funct_decode ;
+    decode_execution_shamt <= shamt_decode ;
     decode_execution_r_type <= r_type_decode ;
     decode_execution_i_type <= i_type_decode ;
     decode_execution_valid <= valid_decode ;
@@ -153,9 +169,9 @@ module processor (
 
   reg [31:0] register_value_1_execution ;
   reg [31:0] register_value_2_execution ;
-  reg [31:0] alu_operand_1_execution ;
-  reg [31:0] alu_operand_2_execution ;
-  reg [31:0] alu_result_execution ;
+  reg signed [31:0] alu_operand_1_execution ;
+  reg signed [31:0] alu_operand_2_execution ;
+  reg signed [31:0] alu_result_execution ;
 
   /* register forwarding */
   always @(*)
@@ -195,17 +211,58 @@ module processor (
       alu_operand_2_execution <= decode_execution_immediate ;
   end
 
+  wire addition_execution ;
+  wire subtraction_execution ;
+
+  /* assign operation */
+  assign addition_execution = 
+      decode_execution_i_type || /* i type */
+      decode_execution_funct == 6'h20 || /* add */
+      decode_execution_funct == 6'h21 ; /* addu */
+
+  assign subtraction_execution = 
+      decode_execution_funct == 6'h22 || /* sub */
+      decode_execution_funct == 6'h23 ; /* subu */
+
   /* alu operation */
   always @(*)
   begin
     /* addition */
-    if (decode_execution_i_type || (decode_execution_funct == 6'h20))
+    if (addition_execution)
       alu_result_execution <= 
         alu_operand_1_execution + alu_operand_2_execution ;
     /* subtraction */
-    else if (decode_execution_funct == 6'h22)
+    else if (subtraction_execution)
       alu_result_execution <=
         alu_operand_1_execution - alu_operand_2_execution ;
+    /* and */
+    else if (decode_execution_funct == 6'h24)
+      alu_result_execution <=
+        alu_operand_1_execution & alu_operand_2_execution ;
+    /* or */
+    else if (decode_execution_funct == 6'h25)
+      alu_result_execution <=
+        alu_operand_1_execution | alu_operand_2_execution ;
+    /* nor */
+    else if (decode_execution_funct == 6'h27)
+      alu_result_execution <= 
+        ~(alu_operand_1_execution | alu_operand_2_execution) ;
+    /* less than */
+    else if (decode_execution_funct == 6'h2a)
+      alu_result_execution <=
+        alu_operand_1_execution < alu_operand_2_execution ;
+    /* shift left logical */
+    else if (decode_execution_funct == 6'h00)
+      alu_result_execution <=
+        alu_operand_2_execution << decode_execution_shamt ;
+    /* shift right logical */
+    else if (decode_execution_funct == 6'h02)
+      alu_result_execution <=
+        alu_operand_2_execution >> decode_execution_shamt ;
+    /* shift right arithmetic */
+    else if (decode_execution_funct == 6'h03)
+      alu_result_execution <=
+        alu_operand_2_execution >>> decode_execution_shamt ;
     /* zero */
     else
       alu_result_execution <= 32'h0 ;
