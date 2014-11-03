@@ -27,9 +27,12 @@ module processor (
   always @(posedge clock)
   begin
     if (reset)
-      PC = 0 ;
+      PC <= 0 ;
+    /* jr */
+    else if (jr_decode)
+      PC <= register_file_read_value_1 ;
     else
-      PC = PC + 4 ;
+      PC <= PC + 4 ;
   end
 
   /* fetch_decode pipeline registers */
@@ -101,6 +104,7 @@ module processor (
     funct_decode == 6'h25 || /* or */
     funct_decode == 6'h27 || /* nor */
     funct_decode == 6'h2a || /* slt */
+    funct_decode == 6'h08 || /* jr */
     shift_funct_decode ;
 
   assign shamt_valid_decode = shift_funct_decode || 
@@ -108,6 +112,10 @@ module processor (
 
   assign valid_decode = i_type_decode ||
     (r_type_decode && funct_valid_decode && shamt_valid_decode) ;
+
+  wire jr_decode ;
+  assign jr_decode = 
+    funct_decode == 6'h08 && r_type_decode && valid_decode ;
 
   /* assign inputs to register file */
   always @(*)
@@ -160,7 +168,10 @@ module processor (
     decode_execution_shamt <= shamt_decode ;
     decode_execution_r_type <= r_type_decode ;
     decode_execution_i_type <= i_type_decode ;
-    decode_execution_valid <= valid_decode ;
+    if (jr_decode)
+      decode_execution_valid <= 1'b0 ;
+    else
+      decode_execution_valid <= valid_decode ;
   end
 
   /*******************/
