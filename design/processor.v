@@ -30,7 +30,7 @@ module processor (
       PC <= 0 ;
     /* jr */
     else if (jr_decode)
-      PC <= register_file_read_value_1 ;
+      PC <= read_value_1_decode ;
     else
       PC <= PC + 4 ;
   end
@@ -140,12 +140,43 @@ module processor (
     end
   end
 
+  /* read from register file */
   assign register_file_read_address_1 = read_address_1_decode ;
   assign register_file_read_address_2 = read_address_2_decode ;
- 
+
+  /* forwarding registers */
+  reg [31:0] read_value_1_decode ;
+  reg [31:0] read_value_2_decode ;
+
+  /* register forwarding */
+  always @(*)
+  begin
+    /* register 1 */
+    case (read_address_1_decode)
+      decode_execution_write_address:
+        read_value_1_decode <= alu_result_execution ;
+      execution_memory_address:
+        read_value_1_decode <= execution_memory_value ;
+      memory_writeback_address:
+        read_value_1_decode <= memory_writeback_value ;
+      default:
+        read_value_1_decode <= register_file_read_value_1 ;
+    endcase
+
+    /* register 2 */
+    case (read_address_2_decode)
+      decode_execution_write_address:
+        read_value_2_decode <= alu_result_execution ;
+      execution_memory_address:
+        read_value_2_decode <= execution_memory_value ;
+      memory_writeback_address:
+        read_value_2_decode <= memory_writeback_value ;
+      default:
+        read_value_2_decode <= register_file_read_value_2 ;
+    endcase
+  end
+
   /* decode execution pipeline registers */
-  reg [4:0] decode_execution_read_address_1 ;
-  reg [4:0] decode_execution_read_address_2 ;
   reg [31:0] decode_execution_read_value_1 ;
   reg [31:0] decode_execution_read_value_2 ;
   reg [31:0] decode_execution_immediate ;
@@ -158,10 +189,8 @@ module processor (
 
   always @(posedge clock)
   begin
-    decode_execution_read_address_1 <= read_address_1_decode ;
-    decode_execution_read_address_2 <= read_address_2_decode ;
-    decode_execution_read_value_1 <= register_file_read_value_1 ;
-    decode_execution_read_value_2 <= register_file_read_value_2 ;
+    decode_execution_read_value_1 <= read_value_1_decode ;
+    decode_execution_read_value_2 <= read_value_2_decode ;
     decode_execution_immediate <= immediate_sign_extend_decode ;
     decode_execution_write_address <= write_address_decode ;
     decode_execution_funct <= funct_decode ;
@@ -178,46 +207,16 @@ module processor (
   /* EXECUTION STAGE */
   /*******************/
 
-  reg [31:0] register_value_1_execution ;
-  reg [31:0] register_value_2_execution ;
   reg signed [31:0] alu_operand_1_execution ;
   reg signed [31:0] alu_operand_2_execution ;
   reg signed [31:0] alu_result_execution ;
 
-  /* register forwarding */
+    /* operand selection */
   always @(*)
   begin
-    /* register 1 */
-    case (decode_execution_read_address_1)
-      execution_memory_address:
-        register_value_1_execution <= execution_memory_value ;
-      memory_writeback_address:
-        register_value_1_execution <= memory_writeback_value ;
-      writeback_fetch_address:
-        register_value_1_execution <= writeback_fetch_value ;
-      default:
-        register_value_1_execution <= decode_execution_read_value_1 ;
-    endcase
-
-    /* register 2 */
-    case (decode_execution_read_address_2)
-      execution_memory_address:
-        register_value_2_execution <= execution_memory_value ;
-      memory_writeback_address:
-        register_value_2_execution <= memory_writeback_value ;
-      writeback_fetch_address:
-        register_value_2_execution <= writeback_fetch_value ;
-      default:
-        register_value_2_execution <= decode_execution_read_value_2 ;
-    endcase
-  end
-
-  /* operand selection */
-  always @(*)
-  begin
-    alu_operand_1_execution <= register_value_1_execution ;
+    alu_operand_1_execution <= decode_execution_read_value_1 ;
     if (decode_execution_r_type)
-      alu_operand_2_execution <= register_value_2_execution ;
+      alu_operand_2_execution <= decode_execution_read_value_2 ;
     else
       alu_operand_2_execution <= decode_execution_immediate ;
   end
