@@ -316,15 +316,5 @@ module processor (
 
   assign register_file_write_enable = memory_writeback_valid ;
 
-  /* writeback fetch pipeline registers */
-  reg [31:0] writeback_fetch_value ;
-  reg [4:0] writeback_fetch_address ;
-
-  always @(posedge clock)
-  begin
-    writeback_fetch_value <= memory_writeback_value ;
-    writeback_fetch_address <= memory_writeback_address ;
-  end
-
 endmodule
 
