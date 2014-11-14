@@ -44,11 +44,14 @@ module top (
   /* extract 1Hz clock */
   clk_div(clock_50MHz,,,,,clock_100Hz,,clock_1Hz) ;
 
-  /* debounce pushbutton */
+  /* debounce pushbutton 
   debounce(~KEY[1], clock_100Hz, push_button_debounced) ;
 
-  /* One pulse pushbutton */
+  /\ One pulse pushbutton \/
   onepulse(push_button_debounced, clock_1Hz, manual_clock) ;
+  */
+
+  assign manual_clock = ~KEY[1] ;
 
   /* set clock */
   always @(clock_control)
