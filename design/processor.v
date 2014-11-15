@@ -28,9 +28,10 @@ module processor (
   begin
     if (reset)
       PC <= 0 ;
-    /* jr */
     else if (jr_decode)
       PC <= read_value_1_decode ;
+    else if (branch_decode && branch_taken_decode)
+      PC <= PC + branch_address_decode ;
     else
       PC <= PC + 4 ;
   end
@@ -81,8 +82,15 @@ module processor (
   /* sign extend immediate number */
   wire [31:0] immediate_sign_extend_decode ;
   assign immediate_sign_extend_decode = 
-    {{16{immediate_decode[15]}}, immediate_decode} ;
+    { {16{immediate_decode[15]}}, immediate_decode } ;
 
+  /* create branch address from immediate number */
+  wire [31:0] branch_address_decode ;
+  assign branch_address_decode = 
+    { {14{immediate_decode[15]}}, immediate_decode, 2'b0 } ;
+
+  `define BEQ 6'h4
+  `define BNE 6'h5
   `define ADDIU 6'h9 
   `define ORI 6'hd 
   `define ANDI 6'hc 
@@ -92,6 +100,8 @@ module processor (
   /* assign instruction type */
   assign r_type_decode = opcode_decode == 6'h0 ;
   assign i_type_decode = 
+    opcode_decode == `BEQ ||
+    opcode_decode == `BNE ||
     opcode_decode == `ADDIU ||
     opcode_decode == `ORI ||
     opcode_decode == `ANDI ||
@@ -187,35 +197,38 @@ module processor (
       op_decode <= `ZERO ;
   end
 
+  /* check instruction to see if the pc will need to be changed */
+
   /* check if decoding a jr instruction */
   wire jr_decode ;
   assign jr_decode = 
     funct_decode == `JR && r_type_decode && valid_decode ;
+  
+  /* branch equal */
+  wire branch_equal_decode ;
+  assign branch_equal_decode = opcode_decode == `BEQ ;
+
+  /* branch not equal */
+  wire branch_not_equal_decode ;
+  assign branch_not_equal_decode = opcode_decode == `BNE ;
+
+  /* check if decoding a branch instruction */
+  wire branch_decode ;
+  assign branch_decode = branch_equal_decode || branch_not_equal_decode ;
 
   /* insert bubble if instruction invalid or jr */
   wire bubble_decode ;
-  assign bubble_decode = !valid_decode || jr_decode ;
+  assign bubble_decode = !valid_decode || jr_decode || branch_decode ;
 
   /* assign inputs to register file */
   always @(*)
   begin
+    read_address_1_decode <= rs_decode ;
+    read_address_2_decode <= rt_decode ;
     if (r_type_decode)
-    begin
-      read_address_1_decode <= rs_decode ;
-      read_address_2_decode <= rt_decode ;
       write_address_decode <= rd_decode ;
-    end 
     else if (i_type_decode)
-    begin
-      read_address_1_decode <= rs_decode ;
-      read_address_2_decode <= 5'b0 ;
       write_address_decode <= rt_decode ;
-    end
-    else
-    begin
-      read_address_1_decode <= 5'b0 ;
-      read_address_2_decode <= 5'b0 ;
-      write_address_decode <= 5'b0 ;
     end
   end
 
@@ -255,6 +268,15 @@ module processor (
     endcase
   end
 
+  /* compare decode values to see if they are equal */
+  wire zero_decode ;
+  assign zero_decode = read_value_1_decode == read_value_2_decode ;
+
+  /* decide whether branch should be taken or not */
+  wire branch_taken_decode ;
+  assign branch_taken_decode = (zero_decode && branch_equal_decode) || 
+    (!zero_decode && branch_not_equal_decode) ;
+
   /* decode execution pipeline registers */
   reg [31:0] decode_execution_read_value_1 ;
   reg [31:0] decode_execution_read_value_2 ;
@@ -293,7 +315,7 @@ module processor (
     alu_operand_1_execution <= decode_execution_read_value_1 ;
     if (decode_execution_r_type)
       alu_operand_2_execution <= decode_execution_read_value_2 ;
-    else
+    else if (decode_execution_i_type)
       alu_operand_2_execution <= decode_execution_immediate ;
   end
 
