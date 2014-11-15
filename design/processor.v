@@ -229,7 +229,6 @@ module processor (
       write_address_decode <= rd_decode ;
     else if (i_type_decode)
       write_address_decode <= rt_decode ;
-    end
   end
 
   /* read from register file */
