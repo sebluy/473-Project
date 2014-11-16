@@ -5,7 +5,8 @@ module top (
   input CLOCK_50,
   inout [7:0] LCD_DATA,
   output LCD_RW, LCD_EN, LCD_RS, LCD_BLON, LCD_ON,
-  output [6:0] HEX7, HEX6, HEX5, HEX4, HEX3, HEX2, HEX1, HEX0
+  output [6:0] HEX7, HEX6, HEX5, HEX4, HEX3, HEX2, HEX1, HEX0,
+  output [17:0] LEDR
 ) ;
   
   wire [31:0] data_memory_value ;
@@ -44,11 +45,14 @@ module top (
   /* extract 1Hz clock */
   clk_div(clock_50MHz,,,,,clock_100Hz,,clock_1Hz) ;
 
-  /* debounce pushbutton */
+  /* debounce pushbutton 
   debounce(~KEY[1], clock_100Hz, push_button_debounced) ;
 
-  /* One pulse pushbutton */
+  /\ One pulse pushbutton \/
   onepulse(push_button_debounced, clock_1Hz, manual_clock) ;
+  */
+
+  assign manual_clock = ~KEY[1] ;
 
   /* set clock */
   always @(clock_control)
@@ -87,7 +91,8 @@ module top (
     instruction_memory_address,
     instruction_memory_value,
     PC,
-    current_instruction
+    current_instruction,
+    LEDR
   ) ;
 
   /* choose value and address */

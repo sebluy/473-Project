@@ -1,0 +1,17 @@
+DEPTH = 1024 ;
+WIDTH = 32 ;
+ADDRESS_RADIX = HEX ;
+DATA_RADIX = HEX ;
+
+CONTENT BEGIN
+
+00  : 34010001 ;
+04  : 0c100006 ;
+08  : 00000000 ;
+0c  : 3c01ffff ;
+10  : 3421ffff ;
+14  : 00012025 ;
+18  : 34030001 ;
+
+END ;
+

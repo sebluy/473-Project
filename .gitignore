@@ -1,5 +1,7 @@
 /design/*.bak
 /design/*.qip
+/test/
 *.sof
+*.temp
 
 

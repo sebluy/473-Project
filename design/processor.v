@@ -13,9 +13,14 @@ module processor (
   output [31:0] register_file_write_value,
   output [5:0] register_file_write_address,
   output register_file_write_enable,
-
   input [31:0] register_file_read_value_1,
-  input [31:0] register_file_read_value_2
+  input [31:0] register_file_read_value_2,
+
+  /* memory */
+  output [31:0] memory_read_address,
+  input [31:0] memory_read_value,
+
+  output [17:0] LEDR
 
 ) ;
 
@@ -28,9 +33,12 @@ module processor (
   begin
     if (reset)
       PC <= 0 ;
-    /* jr */
     else if (jr_decode)
       PC <= read_value_1_decode ;
+    else if (branch_decode && branch_taken_decode)
+      PC <= PC + branch_address_decode ;
+    else if (j_type_decode)
+      PC <= jump_address_decode ;
     else
       PC <= PC + 4 ;
   end
@@ -60,11 +68,9 @@ module processor (
   wire addiu_instruction_decode ;
   wire r_type_decode ;
   wire i_type_decode ;
-  wire valid_decode ;
   wire funct_valid_decode ;
   wire shamt_valid_decode ;
   
-  reg [31:0] immediate_sign_extend_decode ;
   reg [4:0] read_address_1_decode ;
   reg [4:0] read_address_2_decode ;
   reg [4:0] write_address_decode ;
@@ -80,64 +86,192 @@ module processor (
   /* I format exclusive */
   assign immediate_decode = fetch_decode_instruction[15:0] ;
 
-  /* sign extend immediate number */
-  always @(*)
-    immediate_sign_extend_decode[31:0] = 
-      {{16{immediate_decode[15]}}, immediate_decode} ;
+  /* J format exclusive */
+  wire [25:0] address_decode ;
+  assign address_decode = fetch_decode_instruction[25:0] ;
 
+  /* sign extend immediate number */
+  wire [31:0] immediate_sign_extend_decode ;
+  assign immediate_sign_extend_decode = 
+    { {16{immediate_decode[15]}}, immediate_decode } ;
+
+  /* create branch address from immediate number */
+  wire [31:0] branch_address_decode ;
+  assign branch_address_decode = 
+    { {14{immediate_decode[15]}}, immediate_decode, 2'b0 } ;
+
+  /* creat jump address from address */
+  wire [31:0] jump_address_decode ;
+  assign jump_address_decode = 
+    { {PC[31:28], address_decode, 2'b0 } } ;
+
+  `define LW 6'h23
+  `define BEQ 6'h4
+  `define BNE 6'h5
+  `define ADDIU 6'h9 
+  `define ORI 6'hd 
+  `define ANDI 6'hc 
+  `define SLTI 6'ha 
+  `define ADDI 6'h8 
+  `define LUI 6'hf 
   /* assign instruction type */
   assign r_type_decode = opcode_decode == 6'h0 ;
-  assign i_type_decode = opcode_decode == 9'h9 ; /* addui */
+  assign i_type_decode = 
+    opcode_decode == `LW ||
+    opcode_decode == `BEQ ||
+    opcode_decode == `BNE ||
+    opcode_decode == `ADDIU ||
+    opcode_decode == `ORI ||
+    opcode_decode == `ANDI ||
+    opcode_decode == `SLTI ||
+    opcode_decode == `ADDI ||
+    opcode_decode == `LUI ;
 
+  `define J 6'h2
+  `define JAL 6'h3
+  wire j_type_decode ;
+  assign j_type_decode = opcode_decode == `J ||
+    opcode_decode == `JAL ;
+
+  `define SLL 6'h00 
+  `define SRL 6'h02 
+  `define SRA 6'h03 
   wire shift_funct_decode ;
   assign shift_funct_decode = 
-    funct_decode == 6'h00 || /* sll */
-    funct_decode == 6'h02 || /* srl */
-    funct_decode == 6'h03 ; /* sra */
+    funct_decode == `SLL ||
+    funct_decode == `SRL ||
+    funct_decode == `SRA ;
 
+  `define ADD 6'h20 
+  `define ADDU 6'h21 
+  `define SUB 6'h22 
+  `define SUBU 6'h23 
+  `define AND 6'h24 
+  `define OR 6'h25 
+  `define NOR 6'h27 
+  `define SLT 6'h2a 
+  `define JR 6'h08 
   assign funct_valid_decode = 
-    funct_decode == 6'h20 || /* add */
-    funct_decode == 6'h21 || /* addu */
-    funct_decode == 6'h22 || /* sub */
-    funct_decode == 6'h23 || /* subu */
-    funct_decode == 6'h24 || /* and */
-    funct_decode == 6'h25 || /* or */
-    funct_decode == 6'h27 || /* nor */
-    funct_decode == 6'h2a || /* slt */
-    funct_decode == 6'h08 || /* jr */
+    funct_decode == `ADD ||
+    funct_decode == `ADDU ||
+    funct_decode == `SUB ||
+    funct_decode == `SUBU ||
+    funct_decode == `AND ||
+    funct_decode == `OR ||
+    funct_decode == `NOR ||
+    funct_decode == `SLT ||
+    funct_decode == `JR ||
     shift_funct_decode ;
 
   assign shamt_valid_decode = shift_funct_decode || 
     (!shamt_decode && !shift_funct_decode) ;
 
-  assign valid_decode = i_type_decode ||
-    (r_type_decode && funct_valid_decode && shamt_valid_decode) ;
+  /* check to see if instruction is valid */
+  wire valid_decode ;
+  assign valid_decode = i_type_decode || j_type_decode ||
+        (r_type_decode && funct_valid_decode && shamt_valid_decode) ;
 
-  wire jr_decode ;
-  assign jr_decode = 
-    funct_decode == 6'h08 && r_type_decode && valid_decode ;
+  `define ZERO 4'h0 
+  `define ADD_OP 4'h1 
+  `define SUB_OP 4'h2 
+  `define AND_OP 4'h3 
+  `define OR_OP 4'h4 
+  `define NOR_OP 4'h5 
+  `define LESS_THAN_OP 4'h6 
+  `define LOGICAL_SHIFT_LEFT_OP 4'h7 
+  `define LOGICAL_SHIFT_LEFT_16_OP 4'h8 
+  `define LOGICAL_SHIFT_RIGHT_OP 4'h9 
+  `define ARITHMETIC_SHIFT_RIGHT_OP 4'ha 
 
-  /* assign inputs to register file */
+  /* decode operator */
+  reg [3:0] op_decode ;
+
   always @(*)
   begin
     if (r_type_decode)
     begin
-      read_address_1_decode <= rs_decode ;
-      read_address_2_decode <= rt_decode ;
-      write_address_decode <= rd_decode ;
-    end 
+      case (funct_decode)
+      `ADD: op_decode <= `ADD_OP ;
+      `ADDU: op_decode <= `ADD_OP ;
+      `SUB: op_decode <= `SUB_OP ;
+      `SUBU: op_decode <= `SUB_OP ;
+      `AND: op_decode <= `AND_OP ;
+      `OR: op_decode <= `OR_OP ;
+      `NOR: op_decode <= `NOR_OP ;
+      `SLT: op_decode <= `LESS_THAN_OP ;
+      `SLL: op_decode <= `LOGICAL_SHIFT_LEFT_OP ;
+      `SRL: op_decode <= `LOGICAL_SHIFT_RIGHT_OP ;
+      `SRA: op_decode <= `ARITHMETIC_SHIFT_RIGHT_OP ;
+      default: op_decode <= `ZERO ;
+      endcase
+    end
     else if (i_type_decode)
-    begin
-      read_address_1_decode <= rs_decode ;
-      read_address_2_decode <= 5'b0 ;
-      write_address_decode <= rt_decode ;
+    begin 
+      case (opcode_decode)
+      `ADDIU: op_decode <= `ADD_OP ;
+      `ADDI: op_decode <= `ADD_OP ;
+      `LW: op_decode <= `ADD_OP ;
+      `LUI: op_decode <= `LOGICAL_SHIFT_LEFT_16_OP ;
+      `SLTI: op_decode <= `LESS_THAN_OP ;
+      `ANDI: op_decode <= `AND_OP ;
+      `ORI: op_decode <= `OR_OP ;
+      default: op_decode <= `ZERO ;
+      endcase
     end
+    else if (jal_decode)
+      op_decode <= `ADD_OP ;
     else
-    begin
-      read_address_1_decode <= 5'b0 ;
-      read_address_2_decode <= 5'b0 ;
-      write_address_decode <= 5'b0 ;
-    end
+      op_decode <= `ZERO ;
+  end
+
+
+  wire lw_decode ;
+  assign lw_decode = opcode_decode == `LW ;
+
+  /* check instruction to see if the pc will need to be changed */
+
+  /* check if decoding a jr instruction */
+  wire jr_decode ;
+  assign jr_decode = 
+    funct_decode == `JR && r_type_decode && valid_decode ;
+
+  /* check if decoding a j instruction */
+  wire j_decode ;
+  assign j_decode = opcode_decode == `J ;
+
+  /* check if decoding a jal instruction */
+  wire jal_decode ;
+  assign jal_decode = opcode_decode == `JAL ;
+
+  /* branch equal */
+  wire branch_equal_decode ;
+  assign branch_equal_decode = opcode_decode == `BEQ ;
+
+  /* branch not equal */
+  wire branch_not_equal_decode ;
+  assign branch_not_equal_decode = opcode_decode == `BNE ;
+
+  /* check if decoding a branch instruction */
+  wire branch_decode ;
+  assign branch_decode = branch_equal_decode || branch_not_equal_decode ;
+
+  /* insert bubble if instruction invalid or jr */
+  wire bubble_decode ;
+  assign bubble_decode = !valid_decode ||
+    jr_decode || branch_decode || j_decode ;
+
+
+  /* assign inputs to register file */
+  always @(*)
+  begin
+    read_address_1_decode <= rs_decode ;
+    read_address_2_decode <= rt_decode ;
+    if (r_type_decode)
+      write_address_decode <= rd_decode ;
+    else if (i_type_decode)
+      write_address_decode <= rt_decode ;
+    else if (jal_decode)
+      write_address_decode <= 31 ;
   end
 
   /* read from register file */
@@ -176,124 +310,165 @@ module processor (
     endcase
   end
 
+  /* compare decode values to see if they are equal */
+  wire zero_decode ;
+  assign zero_decode = read_value_1_decode == read_value_2_decode ;
+
+  /* decide whether branch should be taken or not */
+  wire branch_taken_decode ;
+  assign branch_taken_decode = (zero_decode && branch_equal_decode) || 
+    (!zero_decode && branch_not_equal_decode) ;
+
+  /* change values if jal */
+  reg [31:0] value_1_decode ;
+  reg [31:0] value_2_decode ;
+  always @(*)
+  begin
+    if (jal_decode)
+    begin
+      value_1_decode <= PC + 4 ; 
+      value_2_decode <= 0 ;
+    end
+    else
+    begin
+      value_1_decode <= read_value_1_decode ;
+      value_2_decode <= read_value_2_decode ;
+    end
+  end
+
   /* decode execution pipeline registers */
   reg [31:0] decode_execution_read_value_1 ;
   reg [31:0] decode_execution_read_value_2 ;
   reg [31:0] decode_execution_immediate ;
-  reg [5:0] decode_execution_funct ;
+  reg [3:0] decode_execution_op ;
   reg [4:0] decode_execution_shamt ;
   reg [4:0] decode_execution_write_address ;
-  reg decode_execution_r_type ;
+  reg [4:0] decode_execution_read_address_1 ;
+  reg [4:0] decode_execution_read_address_2 ;
   reg decode_execution_i_type ;
   reg decode_execution_valid ;
+  reg decode_execution_load ;
 
   always @(posedge clock)
   begin
-    decode_execution_read_value_1 <= read_value_1_decode ;
-    decode_execution_read_value_2 <= read_value_2_decode ;
+    decode_execution_read_value_1 <= value_1_decode ;
+    decode_execution_read_value_2 <= value_2_decode ;
+    decode_execution_read_address_1 <= read_address_1_decode ;
+    decode_execution_read_address_2 <= read_address_2_decode ;
     decode_execution_immediate <= immediate_sign_extend_decode ;
     decode_execution_write_address <= write_address_decode ;
-    decode_execution_funct <= funct_decode ;
+    decode_execution_op <= op_decode ;
     decode_execution_shamt <= shamt_decode ;
-    decode_execution_r_type <= r_type_decode ;
     decode_execution_i_type <= i_type_decode ;
-    if (jr_decode)
-      decode_execution_valid <= 1'b0 ;
-    else
-      decode_execution_valid <= valid_decode ;
+    decode_execution_valid <= !bubble_decode ;
+    decode_execution_load <= lw_decode ;
   end
 
   /*******************/
   /* EXECUTION STAGE */
   /*******************/
 
+  reg [31:0] memory_forward_1_execution ;
+  reg [31:0] memory_forward_2_execution ;
+
+  always @(*)
+  begin
+
+    if (execution_memory_load && 
+        execution_memory_address == decode_execution_read_address_1)
+      memory_forward_1_execution <= memory_read_value ;
+    else
+      memory_forward_1_execution <= decode_execution_read_value_1 ;
+
+    if (execution_memory_load && 
+        execution_memory_address == decode_execution_read_address_2)
+      memory_forward_2_execution <= memory_read_value ;
+    else
+      memory_forward_2_execution <= decode_execution_read_value_2 ;
+
+  end
+
   reg signed [31:0] alu_operand_1_execution ;
   reg signed [31:0] alu_operand_2_execution ;
   reg signed [31:0] alu_result_execution ;
 
-    /* operand selection */
+  /* operand selection */
   always @(*)
   begin
-    alu_operand_1_execution <= decode_execution_read_value_1 ;
-    if (decode_execution_r_type)
-      alu_operand_2_execution <= decode_execution_read_value_2 ;
-    else
+    alu_operand_1_execution <= memory_forward_1_execution ;
+    if (decode_execution_i_type)
       alu_operand_2_execution <= decode_execution_immediate ;
+    else
+      alu_operand_2_execution <= memory_forward_2_execution ;
   end
-
-  wire addition_execution ;
-  wire subtraction_execution ;
-
-  /* assign operation */
-  assign addition_execution = 
-      decode_execution_i_type || /* i type */
-      decode_execution_funct == 6'h20 || /* add */
-      decode_execution_funct == 6'h21 ; /* addu */
-
-  assign subtraction_execution = 
-      decode_execution_funct == 6'h22 || /* sub */
-      decode_execution_funct == 6'h23 ; /* subu */
 
   /* alu operation */
   always @(*)
   begin
-    /* addition */
-    if (addition_execution)
-      alu_result_execution <= 
-        alu_operand_1_execution + alu_operand_2_execution ;
-    /* subtraction */
-    else if (subtraction_execution)
-      alu_result_execution <=
-        alu_operand_1_execution - alu_operand_2_execution ;
-    /* and */
-    else if (decode_execution_funct == 6'h24)
-      alu_result_execution <=
-        alu_operand_1_execution & alu_operand_2_execution ;
-    /* or */
-    else if (decode_execution_funct == 6'h25)
-      alu_result_execution <=
-        alu_operand_1_execution | alu_operand_2_execution ;
-    /* nor */
-    else if (decode_execution_funct == 6'h27)
-      alu_result_execution <= 
-        ~(alu_operand_1_execution | alu_operand_2_execution) ;
-    /* less than */
-    else if (decode_execution_funct == 6'h2a)
-      alu_result_execution <=
-        alu_operand_1_execution < alu_operand_2_execution ;
-    /* shift left logical */
-    else if (decode_execution_funct == 6'h00)
-      alu_result_execution <=
-        alu_operand_2_execution << decode_execution_shamt ;
-    /* shift right logical */
-    else if (decode_execution_funct == 6'h02)
-      alu_result_execution <=
-        alu_operand_2_execution >> decode_execution_shamt ;
-    /* shift right arithmetic */
-    else if (decode_execution_funct == 6'h03)
-      alu_result_execution <=
-        alu_operand_2_execution >>> decode_execution_shamt ;
-    /* zero */
-    else
-      alu_result_execution <= 32'h0 ;
+    case (decode_execution_op)
+
+    `ADD_OP: alu_result_execution <=
+      alu_operand_1_execution + alu_operand_2_execution ;
+
+    `SUB_OP: alu_result_execution <=
+      alu_operand_1_execution - alu_operand_2_execution ;
+
+    `AND_OP: alu_result_execution <=
+      alu_operand_1_execution & alu_operand_2_execution ;
+
+    `OR_OP: alu_result_execution <=
+      alu_operand_1_execution | alu_operand_2_execution ;
+
+    `NOR_OP: alu_result_execution <=
+      alu_operand_1_execution ^| alu_operand_2_execution ;
+
+    `LESS_THAN_OP: alu_result_execution <=
+      alu_operand_1_execution < alu_operand_2_execution ;
+
+    `ARITHMETIC_SHIFT_RIGHT_OP: alu_result_execution <=
+      alu_operand_2_execution >>> decode_execution_shamt ;
+
+    `LOGICAL_SHIFT_RIGHT_OP: alu_result_execution <=
+      alu_operand_2_execution >> decode_execution_shamt ;
+
+    `LOGICAL_SHIFT_LEFT_OP: alu_result_execution <=
+      alu_operand_2_execution << decode_execution_shamt ;
+
+    `LOGICAL_SHIFT_LEFT_16_OP: alu_result_execution <=
+      alu_operand_2_execution << 16 ;
+
+    default: alu_result_execution <= 32'b0 ;
+    endcase
   end
-  
 
   /* execution memory pipeline registers */
   reg [31:0] execution_memory_value ;
   reg [4:0] execution_memory_address ;
   reg execution_memory_valid ;
+  reg execution_memory_load ;
 
   always @(posedge clock)
   begin
     execution_memory_value <= alu_result_execution ;
     execution_memory_address <= decode_execution_write_address ;
     execution_memory_valid <= decode_execution_valid ;
+    execution_memory_load <= decode_execution_load ;
   end
 
   /****************/
   /* MEMORY STAGE */
   /****************/
+
+  assign memory_read_address = execution_memory_value ;
+
+  reg [31:0] value_memory ;
+  always @(*)
+  begin
+    if (execution_memory_load)
+      value_memory <= memory_read_value ;
+    else
+      value_memory <= execution_memory_value ;
+  end
 
   reg [31:0] memory_writeback_value ;
   reg [4:0] memory_writeback_address ;
@@ -301,7 +476,7 @@ module processor (
 
   always @(posedge clock)
   begin
-    memory_writeback_value <= execution_memory_value ;
+    memory_writeback_value <= value_memory ;
     memory_writeback_address <= execution_memory_address ;
     memory_writeback_valid <= execution_memory_valid ;
   end
