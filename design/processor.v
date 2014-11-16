@@ -13,9 +13,12 @@ module processor (
   output [31:0] register_file_write_value,
   output [5:0] register_file_write_address,
   output register_file_write_enable,
-
   input [31:0] register_file_read_value_1,
   input [31:0] register_file_read_value_2,
+
+  /* memory */
+  output [31:0] memory_read_address,
+  input [31:0] memory_read_value,
 
   output [17:0] LEDR
 
@@ -102,6 +105,7 @@ module processor (
   assign jump_address_decode = 
     { {PC[31:28], address_decode, 2'b0 } } ;
 
+  `define LW 6'h23
   `define BEQ 6'h4
   `define BNE 6'h5
   `define ADDIU 6'h9 
@@ -113,6 +117,7 @@ module processor (
   /* assign instruction type */
   assign r_type_decode = opcode_decode == 6'h0 ;
   assign i_type_decode = 
+    opcode_decode == `LW ||
     opcode_decode == `BEQ ||
     opcode_decode == `BNE ||
     opcode_decode == `ADDIU ||
@@ -205,6 +210,7 @@ module processor (
       case (opcode_decode)
       `ADDIU: op_decode <= `ADD_OP ;
       `ADDI: op_decode <= `ADD_OP ;
+      `LW: op_decode <= `ADD_OP ;
       `LUI: op_decode <= `LOGICAL_SHIFT_LEFT_16_OP ;
       `SLTI: op_decode <= `LESS_THAN_OP ;
       `ANDI: op_decode <= `AND_OP ;
@@ -217,6 +223,10 @@ module processor (
     else
       op_decode <= `ZERO ;
   end
+
+
+  wire lw_decode ;
+  assign lw_decode = opcode_decode == `LW ;
 
   /* check instruction to see if the pc will need to be changed */
 
@@ -249,6 +259,7 @@ module processor (
   wire bubble_decode ;
   assign bubble_decode = !valid_decode ||
     jr_decode || branch_decode || j_decode ;
+
 
   /* assign inputs to register file */
   always @(*)
@@ -332,39 +343,63 @@ module processor (
   reg [3:0] decode_execution_op ;
   reg [4:0] decode_execution_shamt ;
   reg [4:0] decode_execution_write_address ;
-  reg decode_execution_r_type ;
+  reg [4:0] decode_execution_read_address_1 ;
+  reg [4:0] decode_execution_read_address_2 ;
   reg decode_execution_i_type ;
   reg decode_execution_valid ;
+  reg decode_execution_load ;
 
   always @(posedge clock)
   begin
     decode_execution_read_value_1 <= value_1_decode ;
     decode_execution_read_value_2 <= value_2_decode ;
+    decode_execution_read_address_1 <= read_address_1_decode ;
+    decode_execution_read_address_2 <= read_address_2_decode ;
     decode_execution_immediate <= immediate_sign_extend_decode ;
     decode_execution_write_address <= write_address_decode ;
     decode_execution_op <= op_decode ;
     decode_execution_shamt <= shamt_decode ;
-    decode_execution_r_type <= r_type_decode ;
     decode_execution_i_type <= i_type_decode ;
     decode_execution_valid <= !bubble_decode ;
+    decode_execution_load <= lw_decode ;
   end
 
   /*******************/
   /* EXECUTION STAGE */
   /*******************/
 
+  reg [31:0] memory_forward_1_execution ;
+  reg [31:0] memory_forward_2_execution ;
+
+  always @(*)
+  begin
+
+    if (execution_memory_load && 
+        execution_memory_address == decode_execution_read_address_1)
+      memory_forward_1_execution <= memory_read_value ;
+    else
+      memory_forward_1_execution <= decode_execution_read_value_1 ;
+
+    if (execution_memory_load && 
+        execution_memory_address == decode_execution_read_address_2)
+      memory_forward_2_execution <= memory_read_value ;
+    else
+      memory_forward_2_execution <= decode_execution_read_value_2 ;
+
+  end
+
   reg signed [31:0] alu_operand_1_execution ;
   reg signed [31:0] alu_operand_2_execution ;
   reg signed [31:0] alu_result_execution ;
 
-    /* operand selection */
+  /* operand selection */
   always @(*)
   begin
-    alu_operand_1_execution <= decode_execution_read_value_1 ;
+    alu_operand_1_execution <= memory_forward_1_execution ;
     if (decode_execution_i_type)
       alu_operand_2_execution <= decode_execution_immediate ;
     else
-      alu_operand_2_execution <= decode_execution_read_value_2 ;
+      alu_operand_2_execution <= memory_forward_2_execution ;
   end
 
   /* alu operation */
@@ -410,17 +445,30 @@ module processor (
   reg [31:0] execution_memory_value ;
   reg [4:0] execution_memory_address ;
   reg execution_memory_valid ;
+  reg execution_memory_load ;
 
   always @(posedge clock)
   begin
     execution_memory_value <= alu_result_execution ;
     execution_memory_address <= decode_execution_write_address ;
     execution_memory_valid <= decode_execution_valid ;
+    execution_memory_load <= decode_execution_load ;
   end
 
   /****************/
   /* MEMORY STAGE */
   /****************/
+
+  assign memory_read_address = execution_memory_value ;
+
+  reg [31:0] value_memory ;
+  always @(*)
+  begin
+    if (execution_memory_load)
+      value_memory <= memory_read_value ;
+    else
+      value_memory <= execution_memory_value ;
+  end
 
   reg [31:0] memory_writeback_value ;
   reg [4:0] memory_writeback_address ;
@@ -428,7 +476,7 @@ module processor (
 
   always @(posedge clock)
   begin
-    memory_writeback_value <= execution_memory_value ;
+    memory_writeback_value <= value_memory ;
     memory_writeback_address <= execution_memory_address ;
     memory_writeback_valid <= execution_memory_valid ;
   end

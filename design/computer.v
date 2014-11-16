@@ -30,9 +30,15 @@ module computer (
     display_register_address, register_file_read_value_1,
     register_file_read_value_2, display_register_value) ;
 
+
+  wire [31:0] processor_memory_read_address ;
+  wire [31:0] processor_memory_read_value ;
+
   /* ram */
-  ramlpm(32'b0, {25'b0, display_data_memory_address, 2'b0}, ~clock, 
-    clock_50MHz, 32'b0, 32'b0, 1'b0, 1'b0, , display_data_memory_value) ;
+  ramlpm(processor_memory_read_address[9:0] ,
+    {display_data_memory_address, 2'b0}, ~clock, clock_50MHz,
+    32'b0, 32'b0, 1'b0, 1'b0, processor_memory_read_value,
+    display_data_memory_value) ;
 
   /* rom */
   romlpm(PC, {display_instruction_memory_address, 2'b0}, ~clock, 
@@ -43,7 +49,8 @@ module computer (
     register_file_read_address_1, register_file_read_address_2,
     register_file_write_value, register_file_write_address,
     register_file_write_enable, register_file_read_value_1, 
-    register_file_read_value_2, LEDR) ;
+    register_file_read_value_2, processor_memory_read_address,
+    processor_memory_read_value, LEDR) ;
 
 endmodule
   
