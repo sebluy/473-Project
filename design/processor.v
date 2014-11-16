@@ -15,7 +15,9 @@ module processor (
   output register_file_write_enable,
 
   input [31:0] register_file_read_value_1,
-  input [31:0] register_file_read_value_2
+  input [31:0] register_file_read_value_2,
+
+  output [17:0] LEDR
 
 ) ;
 
@@ -32,6 +34,8 @@ module processor (
       PC <= read_value_1_decode ;
     else if (branch_decode && branch_taken_decode)
       PC <= PC + branch_address_decode ;
+    else if (j_decode)
+      PC <= jump_address_decode ;
     else
       PC <= PC + 4 ;
   end
@@ -79,6 +83,10 @@ module processor (
   /* I format exclusive */
   assign immediate_decode = fetch_decode_instruction[15:0] ;
 
+  /* J format exclusive */
+  wire [25:0] address_decode ;
+  assign address_decode = fetch_decode_instruction[25:0] ;
+
   /* sign extend immediate number */
   wire [31:0] immediate_sign_extend_decode ;
   assign immediate_sign_extend_decode = 
@@ -88,6 +96,11 @@ module processor (
   wire [31:0] branch_address_decode ;
   assign branch_address_decode = 
     { {14{immediate_decode[15]}}, immediate_decode, 2'b0 } ;
+
+  /* creat jump address from address */
+  wire [31:0] jump_address_decode ;
+  assign jump_address_decode = 
+    { {PC[31:28], address_decode, 2'b0 } } ;
 
   `define BEQ 6'h4
   `define BNE 6'h5
@@ -108,6 +121,10 @@ module processor (
     opcode_decode == `SLTI ||
     opcode_decode == `ADDI ||
     opcode_decode == `LUI ;
+
+  `define J 6'h2
+  wire j_type_decode ;
+  assign j_type_decode = opcode_decode == `J ;
 
   `define SLL 6'h00 
   `define SRL 6'h02 
@@ -144,7 +161,7 @@ module processor (
 
   /* check to see if instruction is valid */
   wire valid_decode ;
-  assign valid_decode = i_type_decode ||
+  assign valid_decode = i_type_decode || j_type_decode ||
         (r_type_decode && funct_valid_decode && shamt_valid_decode) ;
 
   `define ZERO 4'h0 
@@ -203,7 +220,11 @@ module processor (
   wire jr_decode ;
   assign jr_decode = 
     funct_decode == `JR && r_type_decode && valid_decode ;
-  
+
+  /* check if decoding a j instruction */
+  wire j_decode ;
+  assign j_decode = opcode_decode == `J ;
+
   /* branch equal */
   wire branch_equal_decode ;
   assign branch_equal_decode = opcode_decode == `BEQ ;
@@ -218,7 +239,8 @@ module processor (
 
   /* insert bubble if instruction invalid or jr */
   wire bubble_decode ;
-  assign bubble_decode = !valid_decode || jr_decode || branch_decode ;
+  assign bubble_decode = !valid_decode ||
+    jr_decode || branch_decode || j_decode ;
 
   /* assign inputs to register file */
   always @(*)
