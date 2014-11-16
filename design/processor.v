@@ -34,7 +34,7 @@ module processor (
       PC <= read_value_1_decode ;
     else if (branch_decode && branch_taken_decode)
       PC <= PC + branch_address_decode ;
-    else if (j_decode)
+    else if (j_type_decode)
       PC <= jump_address_decode ;
     else
       PC <= PC + 4 ;
@@ -123,8 +123,10 @@ module processor (
     opcode_decode == `LUI ;
 
   `define J 6'h2
+  `define JAL 6'h3
   wire j_type_decode ;
-  assign j_type_decode = opcode_decode == `J ;
+  assign j_type_decode = opcode_decode == `J ||
+    opcode_decode == `JAL ;
 
   `define SLL 6'h00 
   `define SRL 6'h02 
@@ -210,6 +212,8 @@ module processor (
       default: op_decode <= `ZERO ;
       endcase
     end
+    else if (jal_decode)
+      op_decode <= `ADD_OP ;
     else
       op_decode <= `ZERO ;
   end
@@ -224,6 +228,10 @@ module processor (
   /* check if decoding a j instruction */
   wire j_decode ;
   assign j_decode = opcode_decode == `J ;
+
+  /* check if decoding a jal instruction */
+  wire jal_decode ;
+  assign jal_decode = opcode_decode == `JAL ;
 
   /* branch equal */
   wire branch_equal_decode ;
@@ -251,6 +259,8 @@ module processor (
       write_address_decode <= rd_decode ;
     else if (i_type_decode)
       write_address_decode <= rt_decode ;
+    else if (jal_decode)
+      write_address_decode <= 31 ;
   end
 
   /* read from register file */
@@ -298,6 +308,23 @@ module processor (
   assign branch_taken_decode = (zero_decode && branch_equal_decode) || 
     (!zero_decode && branch_not_equal_decode) ;
 
+  /* change values if jal */
+  reg [31:0] value_1_decode ;
+  reg [31:0] value_2_decode ;
+  always @(*)
+  begin
+    if (jal_decode)
+    begin
+      value_1_decode <= PC + 4 ; 
+      value_2_decode <= 0 ;
+    end
+    else
+    begin
+      value_1_decode <= read_value_1_decode ;
+      value_2_decode <= read_value_2_decode ;
+    end
+  end
+
   /* decode execution pipeline registers */
   reg [31:0] decode_execution_read_value_1 ;
   reg [31:0] decode_execution_read_value_2 ;
@@ -311,8 +338,8 @@ module processor (
 
   always @(posedge clock)
   begin
-    decode_execution_read_value_1 <= read_value_1_decode ;
-    decode_execution_read_value_2 <= read_value_2_decode ;
+    decode_execution_read_value_1 <= value_1_decode ;
+    decode_execution_read_value_2 <= value_2_decode ;
     decode_execution_immediate <= immediate_sign_extend_decode ;
     decode_execution_write_address <= write_address_decode ;
     decode_execution_op <= op_decode ;
@@ -334,10 +361,10 @@ module processor (
   always @(*)
   begin
     alu_operand_1_execution <= decode_execution_read_value_1 ;
-    if (decode_execution_r_type)
-      alu_operand_2_execution <= decode_execution_read_value_2 ;
-    else if (decode_execution_i_type)
+    if (decode_execution_i_type)
       alu_operand_2_execution <= decode_execution_immediate ;
+    else
+      alu_operand_2_execution <= decode_execution_read_value_2 ;
   end
 
   /* alu operation */
