@@ -17,8 +17,10 @@ module processor (
   input [31:0] register_file_read_value_2,
 
   /* memory */
-  output [31:0] memory_read_address,
+  output [31:0] memory_address,
   input [31:0] memory_read_value,
+  output [31:0] memory_write_value,
+  output memory_write_enable,
 
   output [17:0] LEDR
 
@@ -106,6 +108,7 @@ module processor (
     { {PC[31:28], address_decode, 2'b0 } } ;
 
   `define LW 6'h23
+  `define SW 6'h2b
   `define BEQ 6'h4
   `define BNE 6'h5
   `define ADDIU 6'h9 
@@ -118,6 +121,7 @@ module processor (
   assign r_type_decode = opcode_decode == 6'h0 ;
   assign i_type_decode = 
     opcode_decode == `LW ||
+    opcode_decode == `SW ||
     opcode_decode == `BEQ ||
     opcode_decode == `BNE ||
     opcode_decode == `ADDIU ||
@@ -211,6 +215,7 @@ module processor (
       `ADDIU: op_decode <= `ADD_OP ;
       `ADDI: op_decode <= `ADD_OP ;
       `LW: op_decode <= `ADD_OP ;
+      `SW: op_decode <= `ADD_OP ;
       `LUI: op_decode <= `LOGICAL_SHIFT_LEFT_16_OP ;
       `SLTI: op_decode <= `LESS_THAN_OP ;
       `ANDI: op_decode <= `AND_OP ;
@@ -224,9 +229,14 @@ module processor (
       op_decode <= `ZERO ;
   end
 
-
+  /* load word */
   wire lw_decode ;
   assign lw_decode = opcode_decode == `LW ;
+
+  /* store word */
+  wire sw_decode ;
+  assign sw_decode = opcode_decode == `SW ;
+  assign LEDR[17] = sw_decode ;
 
   /* check instruction to see if the pc will need to be changed */
 
@@ -348,6 +358,7 @@ module processor (
   reg decode_execution_i_type ;
   reg decode_execution_valid ;
   reg decode_execution_load ;
+  reg decode_execution_store ;
 
   always @(posedge clock)
   begin
@@ -362,6 +373,7 @@ module processor (
     decode_execution_i_type <= i_type_decode ;
     decode_execution_valid <= !bubble_decode ;
     decode_execution_load <= lw_decode ;
+    decode_execution_store <= sw_decode ;
   end
 
   /*******************/
@@ -371,6 +383,7 @@ module processor (
   reg [31:0] memory_forward_1_execution ;
   reg [31:0] memory_forward_2_execution ;
 
+  /* sketchy memory forwarding to avoid stalling */
   always @(*)
   begin
 
@@ -444,8 +457,12 @@ module processor (
   /* execution memory pipeline registers */
   reg [31:0] execution_memory_value ;
   reg [4:0] execution_memory_address ;
+  reg [31:0] execution_memory_store_value ;
   reg execution_memory_valid ;
   reg execution_memory_load ;
+  reg execution_memory_store ;
+
+  assign LEDR[16] = decode_execution_store ;
 
   always @(posedge clock)
   begin
@@ -453,22 +470,37 @@ module processor (
     execution_memory_address <= decode_execution_write_address ;
     execution_memory_valid <= decode_execution_valid ;
     execution_memory_load <= decode_execution_load ;
+    execution_memory_store <= decode_execution_store ;
+    execution_memory_store_value <= memory_forward_2_execution ;
   end
 
   /****************/
   /* MEMORY STAGE */
   /****************/
 
-  assign memory_read_address = execution_memory_value ;
+  assign memory_address = execution_memory_value ;
 
+  /* load value from memory if load instruction */
   reg [31:0] value_memory ;
   always @(*)
   begin
-    if (execution_memory_load)
+    if (execution_memory_load && execution_memory_valid)
       value_memory <= memory_read_value ;
     else
       value_memory <= execution_memory_value ;
   end
+
+  assign LEDR[14:10] = memory_address ;
+  assign LEDR[6:2] = memory_write_value[4:0] ;
+  assign LEDR[0] = memory_write_enable ;
+  assign LEDR[1] = execution_memory_valid ;
+
+  /* store value into memory if store instruction */
+  assign memory_write_value = execution_memory_store_value ;
+
+  assign memory_write_enable =
+    execution_memory_store && execution_memory_valid ;
+      
 
   reg [31:0] memory_writeback_value ;
   reg [4:0] memory_writeback_address ;
@@ -478,7 +510,8 @@ module processor (
   begin
     memory_writeback_value <= value_memory ;
     memory_writeback_address <= execution_memory_address ;
-    memory_writeback_valid <= execution_memory_valid ;
+    memory_writeback_valid <= execution_memory_valid &&
+      !execution_memory_store ;
   end
 
   /********************/

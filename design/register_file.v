@@ -18,7 +18,10 @@ module register_file (
 
   initial
   begin
-    for (i = 0 ; i < 32 ; i = i + 1)
+    for (i = 0 ; i < 29 ; i = i + 1)
+      registers[i] <= i ;
+    registers[29] <= 32'h1c ;
+    for (i = 30 ; i < 32 ; i = i + 1)
       registers[i] <= i ;
   end 
 
