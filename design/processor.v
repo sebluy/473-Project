@@ -337,8 +337,8 @@ module processor (
   begin
     if (jal_decode)
     begin
-      value_1_decode <= PC + 4 ; 
-      value_2_decode <= 0 ;
+      value_1_decode <= PC ; 
+      value_2_decode <= 4 ;
     end
     else
     begin
@@ -375,11 +375,22 @@ module processor (
       decode_execution_valid <= !bubble_decode ;
       decode_execution_load <= lw_decode ;
       decode_execution_store <= sw_decode ;
+      decode_execution_read_value_1 <= value_1_decode ;
+      decode_execution_read_value_2 <= value_2_decode ;
     end
-    /* even if stall, need to update these */
-    decode_execution_read_value_1 <= value_1_decode ;
-    decode_execution_read_value_2 <= value_2_decode ;
+    /* update with new values from memory after stall */
+    else
+    begin
+      if (execution_memory_address == decode_execution_read_address_1)
+        decode_execution_read_value_1 <= value_memory ;
+      else 
+        decode_execution_read_value_2 <= value_memory ;
+    end
   end
+
+
+  assign LEDR[16:13] = decode_execution_read_value_1 ;
+  assign LEDR[12:9] = decode_execution_read_value_2 ;
 
   /*******************/
   /* EXECUTION STAGE */
@@ -471,9 +482,12 @@ module processor (
   /* stall previous stages if data hazard */
   wire stall ;
   assign stall = execution_memory_load && execution_memory_valid &&
-        ((memory_address == decode_execution_read_address_1) ||
-        (memory_address == decode_execution_read_address_2)) ;
+        ((execution_memory_address == decode_execution_read_address_1) ||
+        (execution_memory_address == decode_execution_read_address_2)) ;
 
+  assign LEDR[17] = stall ;
+  assign LEDR[0] = execution_memory_load ;
+  assign LEDR[1] = execution_memory_valid ;
 
   /* load value from memory if load instruction */
   reg [31:0] value_memory ;
@@ -484,11 +498,7 @@ module processor (
     else
       value_memory <= execution_memory_value ;
   end
-
-  assign LEDR[0] = execution_memory_load ;
-  assign LEDR[1] = execution_memory_valid ;
-  assign LEDR[6:2] = value_memory[4:0] ;
-
+  
   /* store value into memory if store instruction */
   assign memory_write_value = execution_memory_store_value ;
 
