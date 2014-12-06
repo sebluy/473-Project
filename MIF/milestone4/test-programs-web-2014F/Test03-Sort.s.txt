@@ -41,6 +41,7 @@ loop3:					# outer loop
 loop4:					
 		lw $t2, 0($t0)		# $t2=A[i]
 		lw $t3, 4($t0)		# $t3=A[i+1]
+    nop
 		ble $t2, $t3, skip1	# test for swapping memory elements	
 		nop			# Branch delay slot
 		sw $t2, 4($t0)

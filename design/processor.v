@@ -66,8 +66,6 @@ module processor (
   wire [4:0] shamt_decode ;
   wire [5:0] funct_decode ;
   wire [15:0] immediate_decode ;
-  wire add_instruction_decode ;
-  wire addiu_instruction_decode ;
   wire r_type_decode ;
   wire i_type_decode ;
   wire funct_valid_decode ;
@@ -236,7 +234,6 @@ module processor (
   /* store word */
   wire sw_decode ;
   assign sw_decode = opcode_decode == `SW ;
-  assign LEDR[17] = sw_decode ;
 
   /* check instruction to see if the pc will need to be changed */
 
@@ -270,7 +267,6 @@ module processor (
   assign bubble_decode = !valid_decode ||
     jr_decode || branch_decode || j_decode ;
 
-
   /* assign inputs to register file */
   always @(*)
   begin
@@ -282,6 +278,8 @@ module processor (
       write_address_decode <= rt_decode ;
     else if (jal_decode)
       write_address_decode <= 31 ;
+    else
+      write_address_decode <= 0 ;
   end
 
   /* read from register file */
@@ -295,29 +293,53 @@ module processor (
   /* register forwarding */
   always @(*)
   begin
+
     /* register 1 */
-    case (read_address_1_decode)
-      decode_execution_write_address:
-        read_value_1_decode <= alu_result_execution ;
-      execution_memory_address:
+    if (read_address_1_decode == decode_execution_write_address &&
+      decode_execution_valid)
+
+      read_value_1_decode <= alu_result_execution ;
+
+    else if (read_address_1_decode == execution_memory_address &&
+      execution_memory_valid)
+
+      if (execution_memory_load)
+        read_value_1_decode <= value_memory ;
+      else
         read_value_1_decode <= execution_memory_value ;
-      memory_writeback_address:
-        read_value_1_decode <= memory_writeback_value ;
-      default:
-        read_value_1_decode <= register_file_read_value_1 ;
-    endcase
+
+    else if (read_address_1_decode == memory_writeback_address &&
+      memory_writeback_valid)
+
+      read_value_1_decode <= memory_writeback_value ;
+   
+    else
+
+      read_value_1_decode <= register_file_read_value_1 ;
 
     /* register 2 */
-    case (read_address_2_decode)
-      decode_execution_write_address:
-        read_value_2_decode <= alu_result_execution ;
-      execution_memory_address:
+    if (read_address_2_decode == decode_execution_write_address &&
+      decode_execution_valid)
+
+      read_value_2_decode <= alu_result_execution ;
+
+    else if (read_address_2_decode == execution_memory_address &&
+      execution_memory_valid)
+
+      if (execution_memory_load)
+        read_value_2_decode <= value_memory ;
+      else
         read_value_2_decode <= execution_memory_value ;
-      memory_writeback_address:
-        read_value_2_decode <= memory_writeback_value ;
-      default:
-        read_value_2_decode <= register_file_read_value_2 ;
-    endcase
+
+    else if (read_address_2_decode == memory_writeback_address &&
+      memory_writeback_valid)
+
+      read_value_2_decode <= memory_writeback_value ;
+   
+    else
+
+      read_value_2_decode <= register_file_read_value_2 ;
+
   end
 
   /* compare decode values to see if they are equal */
@@ -376,30 +398,12 @@ module processor (
     decode_execution_store <= sw_decode ;
   end
 
+  assign LEDR[3] = !bubble_decode ;
+  assign LEDR[2] = decode_execution_valid ;
+
   /*******************/
   /* EXECUTION STAGE */
   /*******************/
-
-  reg [31:0] memory_forward_1_execution ;
-  reg [31:0] memory_forward_2_execution ;
-
-  /* sketchy memory forwarding to avoid stalling */
-  always @(*)
-  begin
-
-    if (execution_memory_load && 
-        execution_memory_address == decode_execution_read_address_1)
-      memory_forward_1_execution <= memory_read_value ;
-    else
-      memory_forward_1_execution <= decode_execution_read_value_1 ;
-
-    if (execution_memory_load && 
-        execution_memory_address == decode_execution_read_address_2)
-      memory_forward_2_execution <= memory_read_value ;
-    else
-      memory_forward_2_execution <= decode_execution_read_value_2 ;
-
-  end
 
   reg signed [31:0] alu_operand_1_execution ;
   reg signed [31:0] alu_operand_2_execution ;
@@ -408,12 +412,16 @@ module processor (
   /* operand selection */
   always @(*)
   begin
-    alu_operand_1_execution <= memory_forward_1_execution ;
+    alu_operand_1_execution <= decode_execution_read_value_1 ;
     if (decode_execution_i_type)
       alu_operand_2_execution <= decode_execution_immediate ;
     else
-      alu_operand_2_execution <= memory_forward_2_execution ;
+      alu_operand_2_execution <= decode_execution_read_value_2 ;
   end
+
+  assign LEDR[7:4] = alu_result_execution ;
+  assign LEDR[11:8] = alu_operand_1_execution ;
+  assign LEDR[15:12] = alu_operand_2_execution ;
 
   /* alu operation */
   always @(*)
@@ -432,8 +440,7 @@ module processor (
     `OR_OP: alu_result_execution <=
       alu_operand_1_execution | alu_operand_2_execution ;
 
-    `NOR_OP: alu_result_execution <=
-      alu_operand_1_execution ^| alu_operand_2_execution ;
+    `NOR_OP: alu_result_execution <= alu_operand_1_execution ^| alu_operand_2_execution ;
 
     `LESS_THAN_OP: alu_result_execution <=
       alu_operand_1_execution < alu_operand_2_execution ;
@@ -462,8 +469,6 @@ module processor (
   reg execution_memory_load ;
   reg execution_memory_store ;
 
-  assign LEDR[16] = decode_execution_store ;
-
   always @(posedge clock)
   begin
     execution_memory_value <= alu_result_execution ;
@@ -471,7 +476,7 @@ module processor (
     execution_memory_valid <= decode_execution_valid ;
     execution_memory_load <= decode_execution_load ;
     execution_memory_store <= decode_execution_store ;
-    execution_memory_store_value <= memory_forward_2_execution ;
+    execution_memory_store_value <= decode_execution_read_value_2 ;
   end
 
   /****************/
@@ -479,6 +484,9 @@ module processor (
   /****************/
 
   assign memory_address = execution_memory_value ;
+
+  assign LEDR[0] = execution_memory_load ;
+  assign LEDR[1] = execution_memory_valid ;
 
   /* load value from memory if load instruction */
   reg [31:0] value_memory ;
@@ -489,11 +497,6 @@ module processor (
     else
       value_memory <= execution_memory_value ;
   end
-
-  assign LEDR[14:10] = memory_address ;
-  assign LEDR[6:2] = memory_write_value[4:0] ;
-  assign LEDR[0] = memory_write_enable ;
-  assign LEDR[1] = execution_memory_valid ;
 
   /* store value into memory if store instruction */
   assign memory_write_value = execution_memory_store_value ;
