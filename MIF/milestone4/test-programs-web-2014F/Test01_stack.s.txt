@@ -60,7 +60,7 @@ fun:	# This function overwrites $s0 and $s1
 	lw $s1,0($sp)		# Restore $s1
 	addi $sp,$sp,4		# Adjust stack pointer
 	lw $s0,0($sp)		# Restore $s0
-	addi $sp,$sp,4		# Adjust stack pointer
+	addi $sp,$sp,4		# Adjust stack pointery
 	
 	# Return from function
 	jr $ra			# Jump to addr stored in $ra
