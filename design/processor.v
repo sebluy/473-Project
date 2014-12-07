@@ -118,6 +118,7 @@ module processor (
   `define LW 6'h23
   `define SW 6'h2b
   `define BEQ 6'h4
+  `define BGEZ 6'h1
   `define BNE 6'h5
   `define ADDIU 6'h9 
   `define ORI 6'hd 
@@ -131,6 +132,7 @@ module processor (
     opcode_decode == `LW ||
     opcode_decode == `SW ||
     opcode_decode == `BEQ ||
+    opcode_decode == `BGEZ ||
     opcode_decode == `BNE ||
     opcode_decode == `ADDIU ||
     opcode_decode == `ORI ||
@@ -261,6 +263,10 @@ module processor (
   assign jal_decode = opcode_decode == `JAL ;
 
   /* branch equal */
+  wire branch_greater_equal_zero_decode ;
+  assign branch_greater_equal_zero_decode = opcode_decode == `BGEZ ;
+
+  /* branch equal */
   wire branch_equal_decode ;
   assign branch_equal_decode = opcode_decode == `BEQ ;
 
@@ -270,7 +276,8 @@ module processor (
 
   /* check if decoding a branch instruction */
   wire branch_decode ;
-  assign branch_decode = branch_equal_decode || branch_not_equal_decode ;
+  assign branch_decode = branch_equal_decode || branch_not_equal_decode ||
+    branch_greater_equal_zero_decode ;
 
   /* insert bubble if instruction invalid or jr */
   wire bubble_decode ;
@@ -356,10 +363,15 @@ module processor (
   wire zero_decode ;
   assign zero_decode = read_value_1_decode == read_value_2_decode ;
 
+  /* compare rs to zero */
+  wire greater_equal_zero_decode ;
+  assign greater_equal_zero_decode = read_value_1_decode >= 0 ;
+
   /* decide whether branch should be taken or not */
   wire branch_taken_decode ;
   assign branch_taken_decode = (zero_decode && branch_equal_decode) || 
-    (!zero_decode && branch_not_equal_decode) ;
+    (!zero_decode && branch_not_equal_decode) ||
+    (greater_equal_zero_decode && branch_greater_equal_zero_decode) ;
 
   /* change values if jal */
   reg [31:0] value_1_decode ;

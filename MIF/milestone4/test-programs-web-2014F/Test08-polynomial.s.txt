@@ -80,4 +80,5 @@ skip_add:
         
 	addu $sp, $fp, 0      
 	jr $ra
+	nop
 	
