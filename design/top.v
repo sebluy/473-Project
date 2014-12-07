@@ -60,7 +60,7 @@ module top (
     if (clock_control == 0)
       clock = manual_clock ;
     else
-      clock = clock_1Hz ;
+      clock = clock_100Hz ;
   end
 
   /* update counter */

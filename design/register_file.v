@@ -18,8 +18,11 @@ module register_file (
 
   initial
   begin
-    for (i = 0 ; i < 32 ; i = i + 1)
-      registers[i] <= i ;
+    for (i = 0 ; i < 29 ; i = i + 1)
+      registers[i] = 0 ;
+    registers[29] <= 32'h7c ;
+    for (i = 30 ; i < 32 ; i = i + 1)
+      registers[i] = 0 ;
   end 
 
   always @(posedge clock)

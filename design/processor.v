@@ -17,8 +17,10 @@ module processor (
   input [31:0] register_file_read_value_2,
 
   /* memory */
-  output [31:0] memory_read_address,
+  output [31:0] memory_address,
   input [31:0] memory_read_value,
+  output [31:0] memory_write_value,
+  output memory_write_enable,
 
   output [17:0] LEDR
 
@@ -33,6 +35,8 @@ module processor (
   begin
     if (reset)
       PC <= 0 ;
+    else if (stall && !stalled)
+      ; /* do nothing */
     else if (jr_decode)
       PC <= read_value_1_decode ;
     else if (branch_decode && branch_taken_decode)
@@ -45,11 +49,19 @@ module processor (
 
   /* fetch_decode pipeline registers */
   reg [31:0] fetch_decode_instruction ;
+  reg stalled ;
 
   /* latch instruction coming out of instruction memory */
   always @(posedge clock)
   begin
-    fetch_decode_instruction <= current_instruction ;
+    if (!stall || stalled)
+    begin
+      fetch_decode_instruction <= current_instruction ;
+      /* only stall for one cycle at most */
+      stalled <= 0 ;
+    end
+    else
+      stalled <= 1 ;
   end
 
 
@@ -64,8 +76,6 @@ module processor (
   wire [4:0] shamt_decode ;
   wire [5:0] funct_decode ;
   wire [15:0] immediate_decode ;
-  wire add_instruction_decode ;
-  wire addiu_instruction_decode ;
   wire r_type_decode ;
   wire i_type_decode ;
   wire funct_valid_decode ;
@@ -106,7 +116,9 @@ module processor (
     { {PC[31:28], address_decode, 2'b0 } } ;
 
   `define LW 6'h23
+  `define SW 6'h2b
   `define BEQ 6'h4
+  `define BGEZ 6'h1
   `define BNE 6'h5
   `define ADDIU 6'h9 
   `define ORI 6'hd 
@@ -118,7 +130,9 @@ module processor (
   assign r_type_decode = opcode_decode == 6'h0 ;
   assign i_type_decode = 
     opcode_decode == `LW ||
+    opcode_decode == `SW ||
     opcode_decode == `BEQ ||
+    opcode_decode == `BGEZ ||
     opcode_decode == `BNE ||
     opcode_decode == `ADDIU ||
     opcode_decode == `ORI ||
@@ -211,6 +225,7 @@ module processor (
       `ADDIU: op_decode <= `ADD_OP ;
       `ADDI: op_decode <= `ADD_OP ;
       `LW: op_decode <= `ADD_OP ;
+      `SW: op_decode <= `ADD_OP ;
       `LUI: op_decode <= `LOGICAL_SHIFT_LEFT_16_OP ;
       `SLTI: op_decode <= `LESS_THAN_OP ;
       `ANDI: op_decode <= `AND_OP ;
@@ -224,9 +239,13 @@ module processor (
       op_decode <= `ZERO ;
   end
 
-
+  /* load word */
   wire lw_decode ;
   assign lw_decode = opcode_decode == `LW ;
+
+  /* store word */
+  wire sw_decode ;
+  assign sw_decode = opcode_decode == `SW ;
 
   /* check instruction to see if the pc will need to be changed */
 
@@ -244,6 +263,10 @@ module processor (
   assign jal_decode = opcode_decode == `JAL ;
 
   /* branch equal */
+  wire branch_greater_equal_zero_decode ;
+  assign branch_greater_equal_zero_decode = opcode_decode == `BGEZ ;
+
+  /* branch equal */
   wire branch_equal_decode ;
   assign branch_equal_decode = opcode_decode == `BEQ ;
 
@@ -253,13 +276,13 @@ module processor (
 
   /* check if decoding a branch instruction */
   wire branch_decode ;
-  assign branch_decode = branch_equal_decode || branch_not_equal_decode ;
+  assign branch_decode = branch_equal_decode || branch_not_equal_decode ||
+    branch_greater_equal_zero_decode ;
 
   /* insert bubble if instruction invalid or jr */
   wire bubble_decode ;
   assign bubble_decode = !valid_decode ||
     jr_decode || branch_decode || j_decode ;
-
 
   /* assign inputs to register file */
   always @(*)
@@ -272,6 +295,8 @@ module processor (
       write_address_decode <= rt_decode ;
     else if (jal_decode)
       write_address_decode <= 31 ;
+    else
+      write_address_decode <= 0 ;
   end
 
   /* read from register file */
@@ -285,39 +310,68 @@ module processor (
   /* register forwarding */
   always @(*)
   begin
+
     /* register 1 */
-    case (read_address_1_decode)
-      decode_execution_write_address:
-        read_value_1_decode <= alu_result_execution ;
-      execution_memory_address:
+    if (read_address_1_decode == decode_execution_write_address &&
+      decode_execution_valid)
+
+      read_value_1_decode <= alu_result_execution ;
+
+    else if (read_address_1_decode == execution_memory_address &&
+      execution_memory_valid)
+
+      if (execution_memory_load)
+        read_value_1_decode <= value_memory ;
+      else
         read_value_1_decode <= execution_memory_value ;
-      memory_writeback_address:
-        read_value_1_decode <= memory_writeback_value ;
-      default:
-        read_value_1_decode <= register_file_read_value_1 ;
-    endcase
+
+    else if (read_address_1_decode == memory_writeback_address &&
+      memory_writeback_valid)
+
+      read_value_1_decode <= memory_writeback_value ;
+   
+    else
+
+      read_value_1_decode <= register_file_read_value_1 ;
 
     /* register 2 */
-    case (read_address_2_decode)
-      decode_execution_write_address:
-        read_value_2_decode <= alu_result_execution ;
-      execution_memory_address:
+    if (read_address_2_decode == decode_execution_write_address &&
+      decode_execution_valid)
+
+      read_value_2_decode <= alu_result_execution ;
+
+    else if (read_address_2_decode == execution_memory_address &&
+      execution_memory_valid)
+
+      if (execution_memory_load)
+        read_value_2_decode <= value_memory ;
+      else
         read_value_2_decode <= execution_memory_value ;
-      memory_writeback_address:
-        read_value_2_decode <= memory_writeback_value ;
-      default:
-        read_value_2_decode <= register_file_read_value_2 ;
-    endcase
+
+    else if (read_address_2_decode == memory_writeback_address &&
+      memory_writeback_valid)
+
+      read_value_2_decode <= memory_writeback_value ;
+   
+    else
+
+      read_value_2_decode <= register_file_read_value_2 ;
+
   end
 
   /* compare decode values to see if they are equal */
   wire zero_decode ;
   assign zero_decode = read_value_1_decode == read_value_2_decode ;
 
+  /* compare rs to zero */
+  wire greater_equal_zero_decode ;
+  assign greater_equal_zero_decode = read_value_1_decode >= 0 ;
+
   /* decide whether branch should be taken or not */
   wire branch_taken_decode ;
   assign branch_taken_decode = (zero_decode && branch_equal_decode) || 
-    (!zero_decode && branch_not_equal_decode) ;
+    (!zero_decode && branch_not_equal_decode) ||
+    (greater_equal_zero_decode && branch_greater_equal_zero_decode) ;
 
   /* change values if jal */
   reg [31:0] value_1_decode ;
@@ -326,8 +380,8 @@ module processor (
   begin
     if (jal_decode)
     begin
-      value_1_decode <= PC + 4 ; 
-      value_2_decode <= 0 ;
+      value_1_decode <= PC ; 
+      value_2_decode <= 4 ;
     end
     else
     begin
@@ -343,64 +397,72 @@ module processor (
   reg [3:0] decode_execution_op ;
   reg [4:0] decode_execution_shamt ;
   reg [4:0] decode_execution_write_address ;
-  reg [4:0] decode_execution_read_address_1 ;
-  reg [4:0] decode_execution_read_address_2 ;
   reg decode_execution_i_type ;
   reg decode_execution_valid ;
   reg decode_execution_load ;
+  reg decode_execution_store ;
 
   always @(posedge clock)
   begin
-    decode_execution_read_value_1 <= value_1_decode ;
-    decode_execution_read_value_2 <= value_2_decode ;
-    decode_execution_read_address_1 <= read_address_1_decode ;
-    decode_execution_read_address_2 <= read_address_2_decode ;
-    decode_execution_immediate <= immediate_sign_extend_decode ;
-    decode_execution_write_address <= write_address_decode ;
-    decode_execution_op <= op_decode ;
-    decode_execution_shamt <= shamt_decode ;
-    decode_execution_i_type <= i_type_decode ;
-    decode_execution_valid <= !bubble_decode ;
-    decode_execution_load <= lw_decode ;
+    if (!stall || stalled)
+    begin
+      decode_execution_read_value_1 <= value_1_decode ;
+      decode_execution_read_value_2 <= value_2_decode ;
+      decode_execution_immediate <= immediate_sign_extend_decode ;
+      decode_execution_write_address <= write_address_decode ;
+      decode_execution_op <= op_decode ;
+      decode_execution_shamt <= shamt_decode ;
+      decode_execution_i_type <= i_type_decode ;
+      decode_execution_valid <= !bubble_decode ;
+      decode_execution_load <= lw_decode ;
+      decode_execution_store <= sw_decode ;
+    end
+    else
+    begin
+      /* clear house */
+      decode_execution_read_value_1 <= 0 ;
+      decode_execution_read_value_2 <= 0 ;
+      decode_execution_immediate <= 0 ;
+      decode_execution_write_address <= 0 ;
+      decode_execution_op <= 0 ;
+      decode_execution_shamt <= 0 ;
+      decode_execution_i_type <= 0 ;
+      decode_execution_valid <= 0 ;
+      decode_execution_load <= 0 ;
+      decode_execution_store <= 0 ;
+    end
   end
+
+  assign LEDR[3] = !bubble_decode ;
+  assign LEDR[2] = decode_execution_valid ;
 
   /*******************/
   /* EXECUTION STAGE */
   /*******************/
 
-  reg [31:0] memory_forward_1_execution ;
-  reg [31:0] memory_forward_2_execution ;
-
-  always @(*)
-  begin
-
-    if (execution_memory_load && 
-        execution_memory_address == decode_execution_read_address_1)
-      memory_forward_1_execution <= memory_read_value ;
-    else
-      memory_forward_1_execution <= decode_execution_read_value_1 ;
-
-    if (execution_memory_load && 
-        execution_memory_address == decode_execution_read_address_2)
-      memory_forward_2_execution <= memory_read_value ;
-    else
-      memory_forward_2_execution <= decode_execution_read_value_2 ;
-
-  end
-
   reg signed [31:0] alu_operand_1_execution ;
   reg signed [31:0] alu_operand_2_execution ;
   reg signed [31:0] alu_result_execution ;
 
+  /* stall if load hazard */
+  wire stall ;
+  assign stall  = decode_execution_load && decode_execution_valid &&
+        (decode_execution_write_address == read_address_1_decode || 
+         decode_execution_write_address == read_address_2_decode) ;
+
   /* operand selection */
   always @(*)
   begin
-    alu_operand_1_execution <= memory_forward_1_execution ;
+    alu_operand_1_execution <= decode_execution_read_value_1 ;
     if (decode_execution_i_type)
       alu_operand_2_execution <= decode_execution_immediate ;
     else
-      alu_operand_2_execution <= memory_forward_2_execution ;
+      alu_operand_2_execution <= decode_execution_read_value_2 ;
   end
+
+  assign LEDR[7:4] = alu_result_execution ;
+  assign LEDR[11:8] = alu_operand_1_execution ;
+  assign LEDR[15:12] = alu_operand_2_execution ;
 
   /* alu operation */
   always @(*)
@@ -444,8 +506,10 @@ module processor (
   /* execution memory pipeline registers */
   reg [31:0] execution_memory_value ;
   reg [4:0] execution_memory_address ;
+  reg [31:0] execution_memory_store_value ;
   reg execution_memory_valid ;
   reg execution_memory_load ;
+  reg execution_memory_store ;
 
   always @(posedge clock)
   begin
@@ -453,22 +517,35 @@ module processor (
     execution_memory_address <= decode_execution_write_address ;
     execution_memory_valid <= decode_execution_valid ;
     execution_memory_load <= decode_execution_load ;
+    execution_memory_store <= decode_execution_store ;
+    execution_memory_store_value <= decode_execution_read_value_2 ;
   end
 
   /****************/
   /* MEMORY STAGE */
   /****************/
 
-  assign memory_read_address = execution_memory_value ;
+  assign memory_address = execution_memory_value ;
 
+  assign LEDR[0] = execution_memory_load ;
+  assign LEDR[1] = execution_memory_valid ;
+
+  /* load value from memory if load instruction */
   reg [31:0] value_memory ;
   always @(*)
   begin
-    if (execution_memory_load)
+    if (execution_memory_load && execution_memory_valid)
       value_memory <= memory_read_value ;
     else
       value_memory <= execution_memory_value ;
   end
+
+  /* store value into memory if store instruction */
+  assign memory_write_value = execution_memory_store_value ;
+
+  assign memory_write_enable =
+    execution_memory_store && execution_memory_valid ;
+      
 
   reg [31:0] memory_writeback_value ;
   reg [4:0] memory_writeback_address ;
@@ -478,7 +555,8 @@ module processor (
   begin
     memory_writeback_value <= value_memory ;
     memory_writeback_address <= execution_memory_address ;
-    memory_writeback_valid <= execution_memory_valid ;
+    memory_writeback_valid <= execution_memory_valid &&
+      !execution_memory_store ;
   end
 
   /********************/
