@@ -35,6 +35,8 @@ module processor (
   begin
     if (reset)
       PC <= 0 ;
+    else if (stall && !stalled)
+      ; /* do nothing */
     else if (jr_decode)
       PC <= read_value_1_decode ;
     else if (branch_decode && branch_taken_decode)
@@ -47,11 +49,19 @@ module processor (
 
   /* fetch_decode pipeline registers */
   reg [31:0] fetch_decode_instruction ;
+  reg stalled ;
 
   /* latch instruction coming out of instruction memory */
   always @(posedge clock)
   begin
-    fetch_decode_instruction <= current_instruction ;
+    if (!stall || stalled)
+    begin
+      fetch_decode_instruction <= current_instruction ;
+      /* only stall for one cycle at most */
+      stalled <= 0 ;
+    end
+    else
+      stalled <= 1 ;
   end
 
 
@@ -375,8 +385,6 @@ module processor (
   reg [3:0] decode_execution_op ;
   reg [4:0] decode_execution_shamt ;
   reg [4:0] decode_execution_write_address ;
-  reg [4:0] decode_execution_read_address_1 ;
-  reg [4:0] decode_execution_read_address_2 ;
   reg decode_execution_i_type ;
   reg decode_execution_valid ;
   reg decode_execution_load ;
@@ -384,18 +392,33 @@ module processor (
 
   always @(posedge clock)
   begin
-    decode_execution_read_value_1 <= value_1_decode ;
-    decode_execution_read_value_2 <= value_2_decode ;
-    decode_execution_read_address_1 <= read_address_1_decode ;
-    decode_execution_read_address_2 <= read_address_2_decode ;
-    decode_execution_immediate <= immediate_sign_extend_decode ;
-    decode_execution_write_address <= write_address_decode ;
-    decode_execution_op <= op_decode ;
-    decode_execution_shamt <= shamt_decode ;
-    decode_execution_i_type <= i_type_decode ;
-    decode_execution_valid <= !bubble_decode ;
-    decode_execution_load <= lw_decode ;
-    decode_execution_store <= sw_decode ;
+    if (!stall || stalled)
+    begin
+      decode_execution_read_value_1 <= value_1_decode ;
+      decode_execution_read_value_2 <= value_2_decode ;
+      decode_execution_immediate <= immediate_sign_extend_decode ;
+      decode_execution_write_address <= write_address_decode ;
+      decode_execution_op <= op_decode ;
+      decode_execution_shamt <= shamt_decode ;
+      decode_execution_i_type <= i_type_decode ;
+      decode_execution_valid <= !bubble_decode ;
+      decode_execution_load <= lw_decode ;
+      decode_execution_store <= sw_decode ;
+    end
+    else
+    begin
+      /* clear house */
+      decode_execution_read_value_1 <= 0 ;
+      decode_execution_read_value_2 <= 0 ;
+      decode_execution_immediate <= 0 ;
+      decode_execution_write_address <= 0 ;
+      decode_execution_op <= 0 ;
+      decode_execution_shamt <= 0 ;
+      decode_execution_i_type <= 0 ;
+      decode_execution_valid <= 0 ;
+      decode_execution_load <= 0 ;
+      decode_execution_store <= 0 ;
+    end
   end
 
   assign LEDR[3] = !bubble_decode ;
@@ -408,6 +431,12 @@ module processor (
   reg signed [31:0] alu_operand_1_execution ;
   reg signed [31:0] alu_operand_2_execution ;
   reg signed [31:0] alu_result_execution ;
+
+  /* stall if load hazard */
+  wire stall ;
+  assign stall  = decode_execution_load && decode_execution_valid &&
+        (decode_execution_write_address == read_address_1_decode || 
+         decode_execution_write_address == read_address_2_decode) ;
 
   /* operand selection */
   always @(*)
@@ -440,7 +469,8 @@ module processor (
     `OR_OP: alu_result_execution <=
       alu_operand_1_execution | alu_operand_2_execution ;
 
-    `NOR_OP: alu_result_execution <= alu_operand_1_execution ^| alu_operand_2_execution ;
+    `NOR_OP: alu_result_execution <=
+      alu_operand_1_execution ^| alu_operand_2_execution ;
 
     `LESS_THAN_OP: alu_result_execution <=
       alu_operand_1_execution < alu_operand_2_execution ;
